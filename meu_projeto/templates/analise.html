@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Análise por Loja</title>
+</head>
+<body>
+    <h1>Análise por Loja</h1>
+
+    <form method="POST">
+        <label for="nome_sub_grupo">Sub Grupo:</label>
+        <select name="nome_sub_grupo" id="nome_sub_grupo">
+            <option value="">-- Todos --</option>
+            {% for sub in sub_grupos %}
+                <option value="{{ sub }}" {% if sub == filtro_sub_grupo %}selected{% endif %}>{{ sub }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="nome_secao">Seção:</label>
+        <select name="nome_secao" id="nome_secao">
+            <option value="">-- Todos --</option>
+            {% for sec in secoes %}
+                <option value="{{ sec }}" {% if sec == filtro_secao %}selected{% endif %}>{{ sec }}</option>
+            {% endfor %}
+        </select>
+
+        <label for="nome_produto">Produto:</label>
+        <select name="nome_produto" id="nome_produto">
+            <option value="">-- Todos --</option>
+            {% for produto in produtos %}
+                <option value="{{ produto }}" {% if produto == filtro_produto %}selected{% endif %}>{{ produto }}</option>
+            {% endfor %}
+        </select>
+
+        <button type="submit">Filtrar</button>
+    </form>
+
+    <br>
+
+    {% if tem_dados %}
+        <table border="1" cellpadding="5" cellspacing="0">
+            <thead>
+                <tr>
+                    <th>Loja</th>
+                    <th>Quantidade Total de Itens</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in total_por_loja.itertuples() %}
+                    <tr>
+                        <td>{{ row.codigo_loja }}</td>
+                        <td>{{ row.Estoque }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif filtro_sub_grupo or filtro_secao or filtro_produto %}
+        <p>Nenhum estoque encontrado para o filtro selecionado.</p>
+    {% else %}
+        <p>Selecione ao menos um filtro para ver a análise.</p>
+    {% endif %}
+
+    <br>
+    <a href="{{ url_for('index') }}">Voltar para Upload</a>
+</body>
+</html>

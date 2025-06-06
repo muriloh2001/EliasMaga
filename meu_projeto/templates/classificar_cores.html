@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Classificar Cores</title>
+</head>
+<body>
+    <h1>Classificação Manual de Cores</h1>
+
+    <form action="{{ url_for('atualizar_cores') }}" method="post">
+        <table border="1" cellpadding="8">
+            <tr>
+                <th>Cor Original</th>
+                <th>Cor Pai Sugerida</th>
+                <th>Editar Cor Pai</th>
+            </tr>
+            {% for item in sugestoes %}
+            <tr>
+                <td>{{ item.cor_1 }}</td>
+                <td>{{ item.cor_pai_sugerida }}</td>
+                <td>
+                    <input type="text" name="cor_{{ item.cor_1 }}" value="{{ item.cor_pai_sugerida }}">
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        <br>
+        <button type="submit">Aplicar Classificações</button>
+    </form>
+    <br>
+    <a href="{{ url_for('index') }}">← Voltar ao Início</a>
+</body>
+</html>
