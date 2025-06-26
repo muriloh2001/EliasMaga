@@ -10,9 +10,10 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 df_global = None  # Armazena o DataFrame carregado
+MAPEAMENTO_CSV = 'mapeamento_cores.csv'  # Arquivo persistente
 
-# Dicionário de mapeamento de cores para cor pai
-mapeamento_cores = {
+# Dicionário automático de fallback
+MAPEAMENTO_AUTOMATICO = {
     'azul': 'Azul',
     'marinho': 'Marinho',
     'verde': 'Verde',
@@ -30,13 +31,37 @@ mapeamento_cores = {
     'marrom': 'Marrom'
 }
 
+# =================== Funções de persistência ===================
+
+def carregar_mapeamento_csv():
+    if os.path.exists(MAPEAMENTO_CSV):
+        return pd.read_csv(MAPEAMENTO_CSV).set_index('cor_1')['cor_pai'].to_dict()
+    return {}
+
+def salvar_mapeamento_csv(dicionario):
+    df = pd.DataFrame(list(dicionario.items()), columns=['cor_1', 'cor_pai'])
+    df.to_csv(MAPEAMENTO_CSV, index=False)
+
+mapeamento_cores = carregar_mapeamento_csv()
+
+# =================== Classificação de cor ===================
+
 def classificar_cor_pai(cor):
     if pd.isna(cor):
         return 'Desconhecido'
-    cor = cor.lower()
-    for palavra, cor_pai in mapeamento_cores.items():
-        if palavra in cor:
+
+    cor_lower = cor.lower().strip()
+
+    # Mapeamento manual
+    for key in mapeamento_cores:
+        if key.lower().strip() == cor_lower:
+            return mapeamento_cores[key]
+
+    # Fallback automático
+    for palavra, cor_pai in MAPEAMENTO_AUTOMATICO.items():
+        if palavra in cor_lower:
             return cor_pai
+
     return 'Outras'
 
 @app.route('/', methods=['GET', 'POST'])
@@ -58,13 +83,10 @@ def index():
                 return redirect(url_for('index'))
 
             df_global['cor_pai'] = df_global['cor_1'].apply(classificar_cor_pai)
-
             flash("Arquivo carregado com sucesso! Você pode ir para a página de análise.", "success")
             return redirect(url_for('analise'))
 
     return render_template('index.html')
-
-
 
 @app.route('/classificar_cores', methods=['GET'])
 def classificar_cores():
@@ -73,48 +95,42 @@ def classificar_cores():
     if df_global is None or 'cor_1' not in df_global.columns:
         return "Nenhum arquivo carregado ou coluna 'cor_1' ausente."
 
-    # Cores únicas da planilha
-    cores_unicas = df_global['cor_1'].dropna().unique()
+    cores_planilha = df_global['cor_1'].dropna().unique()
+    cores_mapeadas = [k.lower().strip() for k in mapeamento_cores.keys()]
+    cores_novas = [c for c in cores_planilha if c.lower().strip() not in cores_mapeadas]
 
-    # Gera sugestões com base na função automática
-    sugestoes = [
-        {
-            'cor_1': cor,
-            'cor_pai_sugerida': classificar_cor_pai(cor)
-        }
-        for cor in cores_unicas
-    ]
+    sugestoes = [{'cor_1': cor, 'cor_pai_sugerida': classificar_cor_pai(cor)} for cor in cores_novas]
 
     return render_template('classificar_cores.html', sugestoes=sugestoes)
 
 @app.route('/atualizar_cores', methods=['POST'])
 def atualizar_cores():
-    global df_global
+    global df_global, mapeamento_cores
 
     if df_global is None:
         return "Nenhum arquivo carregado."
 
-    # Cria um dicionário de correções enviadas
     novas_classificacoes = {}
     for key in request.form:
         if key.startswith('cor_'):
-            cor_original = key[4:]  # remove 'cor_' do início
+            cor_original = key[4:]
             nova_cor_pai = request.form[key]
             novas_classificacoes[cor_original] = nova_cor_pai
 
-    # Aplica as classificações manualmente
-    def classificar_manual(cor):
-        if pd.isna(cor):
-            return 'Desconhecido'
-        return novas_classificacoes.get(cor, 'Outras')
+    # Atualiza dicionário manual
+    mapeamento_cores.update(novas_classificacoes)
+    salvar_mapeamento_csv(mapeamento_cores)
 
-    df_global['cor_pai'] = df_global['cor_1'].apply(classificar_manual)
+    # Reclassifica com novos dados
+    df_global['cor_pai'] = df_global['cor_1'].apply(classificar_cor_pai)
 
     return redirect(url_for('index'))
 
 @app.route('/analise', methods=['GET', 'POST'])
 def analise():
     global df_global
+
+    df_completo = None
 
     if df_global is None:
         return "Nenhum arquivo foi carregado ainda."
@@ -123,9 +139,10 @@ def analise():
     secoes = sorted(df_global['nome_secao'].dropna().unique())
     produtos = sorted(df_global['nome_produto'].dropna().unique())
 
-    filtro_sub_grupo = request.form.get('nome_sub_grupo') or ''
-    filtro_secao = request.form.get('nome_secao') or ''
-    filtro_produto = request.form.get('nome_produto') or ''
+    filtro_sub_grupo = request.form.get('nome_sub_grupo') or request.args.get('nome_sub_grupo', '')
+    filtro_secao = request.form.get('nome_secao') or request.args.get('nome_secao', '')
+    filtro_produto = request.form.get('nome_produto') or request.args.get('nome_produto', '')
+
 
     df_filtrado = df_global.copy()
 
@@ -143,6 +160,107 @@ def analise():
         total_por_loja = None
         tem_dados = False
 
+    if not df_filtrado.empty:
+        df_comparativo = df_filtrado.groupby(['codigo_loja', 'cor_pai', 'tamanho'])['Estoque'].sum().reset_index()
+        todas_lojas = df_filtrado['codigo_loja'].unique()
+        todas_cores = df_filtrado['cor_pai'].unique()
+        todos_tamanhos = df_filtrado['tamanho'].unique()
+
+        combinacoes = pd.MultiIndex.from_product(
+            [todas_lojas, todas_cores, todos_tamanhos],
+            names=['codigo_loja', 'cor_pai', 'tamanho']
+        )
+
+        df_completo = df_comparativo.set_index(['codigo_loja', 'cor_pai', 'tamanho']) \
+            .reindex(combinacoes, fill_value=0) \
+            .reset_index()
+
+        df_completo['status'] = df_completo['Estoque'].apply(
+            lambda x: 'sobra' if x > 1 else ('falta' if x == 0 else 'ok')
+        )
+
+        recomendacoes = []
+
+        for cor in todas_cores:
+            for tam in todos_tamanhos:
+                sobras_deposito = df_completo[
+                    (df_completo['cor_pai'] == cor) &
+                    (df_completo['tamanho'] == tam) &
+                    (df_completo['status'] == 'sobra') &
+                    (df_completo['codigo_loja'] == 99)
+                ]
+
+                sobras_lojas = df_completo[
+                    (df_completo['cor_pai'] == cor) &
+                    (df_completo['tamanho'] == tam) &
+                    (df_completo['status'] == 'sobra') &
+                    (df_completo['codigo_loja'] != 99) &
+                    (df_completo['codigo_loja'] != 98)
+                ]
+
+                faltas = df_completo[
+                    (df_completo['cor_pai'] == cor) &
+                    (df_completo['tamanho'] == tam) &
+                    (df_completo['status'] == 'falta') &
+                    (df_completo['codigo_loja'] != 98)
+                ]
+
+                for _, row_falta in faltas.iterrows():
+                    if not sobras_deposito.empty:
+                        row_sobra = sobras_deposito.iloc[0]
+                        recomendacoes.append({
+                            'cor_pai': cor,
+                            'tamanho': tam,
+                            'loja_origem': row_sobra['codigo_loja'],
+                            'loja_destino': row_falta['codigo_loja'],
+                            'quantidade': 1
+                        })
+                        df_completo.loc[
+                            (df_completo['codigo_loja'] == row_sobra['codigo_loja']) &
+                            (df_completo['cor_pai'] == cor) &
+                            (df_completo['tamanho'] == tam),
+                            'Estoque'
+                        ] -= 1
+                        estoque_atual = df_completo.loc[
+                            (df_completo['codigo_loja'] == row_sobra['codigo_loja']) &
+                            (df_completo['cor_pai'] == cor) &
+                            (df_completo['tamanho'] == tam),
+                            'Estoque'
+                        ].values[0]
+                        if estoque_atual <= 1:
+                            sobras_deposito = sobras_deposito.iloc[1:]
+
+                    elif not sobras_lojas.empty:
+                        row_sobra = sobras_lojas.iloc[0]
+                        recomendacoes.append({
+                            'cor_pai': cor,
+                            'tamanho': tam,
+                            'loja_origem': row_sobra['codigo_loja'],
+                            'loja_destino': row_falta['codigo_loja'],
+                            'quantidade': 1
+                        })
+                        df_completo.loc[
+                            (df_completo['codigo_loja'] == row_sobra['codigo_loja']) &
+                            (df_completo['cor_pai'] == cor) &
+                            (df_completo['tamanho'] == tam),
+                            'Estoque'
+                        ] -= 1
+                        estoque_atual = df_completo.loc[
+                            (df_completo['codigo_loja'] == row_sobra['codigo_loja']) &
+                            (df_completo['cor_pai'] == cor) &
+                            (df_completo['tamanho'] == tam),
+                            'Estoque'
+                        ].values[0]
+                        if estoque_atual <= 1:
+                            sobras_lojas = sobras_lojas.iloc[1:]
+    else:
+        recomendacoes = []
+
+    if df_completo is not None and not df_completo.empty:
+        df_completo_html = df_completo.to_dict(orient='records')
+    else:
+        df_completo_html = None
+
     return render_template(
         'analise.html',
         sub_grupos=sub_grupos,
@@ -152,9 +270,97 @@ def analise():
         filtro_secao=filtro_secao,
         filtro_produto=filtro_produto,
         total_por_loja=total_por_loja,
-        tem_dados=tem_dados
+        tem_dados=tem_dados,
+        recomendacoes=recomendacoes,
+        df_completo=df_completo_html
     )
 
+@app.route('/analise_detalhada/<codigo_loja>')
+def analise_detalhada(codigo_loja):
+    global df_global
+
+    if df_global is None:
+        return "Nenhum arquivo carregado ainda."
+
+    try:
+        codigo_loja_int = int(codigo_loja)
+    except ValueError:
+        return "Código de loja inválido."
+
+    # Recebe filtros da query string
+    filtro_sub_grupo = request.args.get('nome_sub_grupo', '')
+    filtro_secao = request.args.get('nome_secao', '')
+    filtro_produto = request.args.get('nome_produto', '')
+
+    # Filtra o DataFrame conforme filtros escolhidos
+    df_filtrado = df_global.copy()
+
+    if filtro_sub_grupo:
+        df_filtrado = df_filtrado[df_filtrado['nome_sub_grupo'] == filtro_sub_grupo]
+    if filtro_secao:
+        df_filtrado = df_filtrado[df_filtrado['nome_secao'] == filtro_secao]
+    if filtro_produto:
+        df_filtrado = df_filtrado[df_filtrado['nome_produto'] == filtro_produto]
+
+    if df_filtrado.empty:
+        return f"Nenhum dado encontrado para os filtros aplicados."
+
+    # Agora filtra somente a loja escolhida
+    df_loja = df_filtrado[df_filtrado['codigo_loja'] == codigo_loja_int]
+
+    if df_loja.empty:
+        return f"Nenhum dado encontrado para a loja {codigo_loja} com os filtros aplicados."
+
+    # Atualiza cor_pai
+    df_loja['cor_pai'] = df_loja['cor_1'].apply(classificar_cor_pai)
+
+    # Agrupa por cor_pai e tamanho para somar estoque na loja
+    agrupado_loja = df_loja.groupby(['cor_pai', 'tamanho'])['Estoque'].sum().reset_index()
+
+    # Para montar a grade completa: para cada cor_pai, pegar os tamanhos existentes no grupo filtrado (independente da loja)
+    # Vamos usar df_filtrado para pegar as combinações possíveis
+    cores_tamanhos_por_cor = df_filtrado.groupby('cor_pai')['tamanho'].unique().to_dict()
+
+    # Monta lista de tuplas cor_pai x tamanho baseado na combinação real por cor
+    combinacoes = []
+    for cor, tamanhos in cores_tamanhos_por_cor.items():
+        for tam in tamanhos:
+            combinacoes.append((cor, tam))
+
+    # Cria DataFrame com todas as combinações possíveis para o grupo filtrado
+    df_completo = pd.DataFrame(combinacoes, columns=['cor_pai', 'tamanho'])
+
+    # Junta o estoque da loja, se existir, senão preenche com zero
+    df_completo = df_completo.merge(agrupado_loja, on=['cor_pai', 'tamanho'], how='left')
+    df_completo['Estoque'] = df_completo['Estoque'].fillna(0).astype(int)
+
+    # Sobras e faltas para exibir separadamente (opcional)
+   # Remove estoques negativos, se existirem
+    df_completo = df_completo[df_completo['Estoque'] >= 0]
+
+    # Grade: apenas estoques positivos (> 0)
+    grade = df_completo[df_completo['Estoque'] > 0].to_dict(orient='records')
+
+    # Sobras: estoque > 1
+    sobras = df_completo[df_completo['Estoque'] > 1].to_dict(orient='records')
+
+    # Faltas: estoque == 0
+    faltas = df_completo[df_completo['Estoque'] == 0].to_dict(orient='records')
+
+    # DEBUG
+    print("📦 Grade completa da loja", codigo_loja)
+    print(df_completo.head())
+
+    return render_template(
+        'analise_detalhada.html',
+        codigo_loja=codigo_loja,
+        filtro_sub_grupo=filtro_sub_grupo,
+        filtro_secao=filtro_secao,
+        filtro_produto=filtro_produto,
+        grade=grade,
+        sobras=sobras,
+        faltas=faltas
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)

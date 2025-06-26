@@ -1,65 +1,127 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt">
 <head>
-    <title>Análise por Loja</title>
+  <meta charset="UTF-8">
+  <title>Análise por Loja</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <h1>Análise por Loja</h1>
+<body class="bg-gray-50 text-gray-800 px-6 py-8">
 
-    <form method="POST">
-        <label for="nome_sub_grupo">Sub Grupo:</label>
-        <select name="nome_sub_grupo" id="nome_sub_grupo">
+  <div class="max-w-7xl mx-auto">
+
+    <h1 class="text-3xl font-bold mb-6">📊 Análise por Loja</h1>
+
+    <!-- 🔎 Formulário de Filtros -->
+    <form method="POST" class="bg-white p-6 rounded shadow mb-8 space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Subgrupo -->
+        <div>
+          <label for="nome_sub_grupo" class="block text-sm font-medium text-gray-700">Subgrupo</label>
+          <select name="nome_sub_grupo" id="nome_sub_grupo" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
             <option value="">-- Todos --</option>
             {% for sub in sub_grupos %}
-                <option value="{{ sub }}" {% if sub == filtro_sub_grupo %}selected{% endif %}>{{ sub }}</option>
+              <option value="{{ sub }}" {% if sub == filtro_sub_grupo %}selected{% endif %}>{{ sub }}</option>
             {% endfor %}
-        </select>
+          </select>
+        </div>
 
-        <label for="nome_secao">Seção:</label>
-        <select name="nome_secao" id="nome_secao">
+        <!-- Seção -->
+        <div>
+          <label for="nome_secao" class="block text-sm font-medium text-gray-700">Seção</label>
+          <select name="nome_secao" id="nome_secao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
             <option value="">-- Todos --</option>
             {% for sec in secoes %}
-                <option value="{{ sec }}" {% if sec == filtro_secao %}selected{% endif %}>{{ sec }}</option>
+              <option value="{{ sec }}" {% if sec == filtro_secao %}selected{% endif %}>{{ sec }}</option>
             {% endfor %}
-        </select>
+          </select>
+        </div>
 
-        <label for="nome_produto">Produto:</label>
-        <select name="nome_produto" id="nome_produto">
+        <!-- Produto -->
+        <div>
+          <label for="nome_produto" class="block text-sm font-medium text-gray-700">Produto</label>
+          <select name="nome_produto" id="nome_produto" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
             <option value="">-- Todos --</option>
             {% for produto in produtos %}
-                <option value="{{ produto }}" {% if produto == filtro_produto %}selected{% endif %}>{{ produto }}</option>
+              <option value="{{ produto }}" {% if produto == filtro_produto %}selected{% endif %}>{{ produto }}</option>
             {% endfor %}
-        </select>
+          </select>
+        </div>
+      </div>
 
-        <button type="submit">Filtrar</button>
+      <button type="submit" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+        Filtrar
+      </button>
     </form>
 
-    <br>
-
+    <!-- 📦 Tabela Principal -->
     {% if tem_dados %}
-        <table border="1" cellpadding="5" cellspacing="0">
-            <thead>
-                <tr>
-                    <th>Loja</th>
-                    <th>Quantidade Total de Itens</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in total_por_loja.itertuples() %}
-                    <tr>
-                        <td>{{ row.codigo_loja }}</td>
-                        <td>{{ row.Estoque }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
+      <div class="overflow-x-auto shadow rounded mb-10">
+        <table class="min-w-full bg-white divide-y divide-gray-200">
+          <thead class="bg-gray-100 text-gray-700 text-sm font-medium">
+            <tr>
+              <th class="px-4 py-3 text-left">Loja</th>
+              <th class="px-4 py-3 text-left">Quantidade Total de Itens</th>
+              <th class="px-4 py-3 text-left">Detalhe</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 text-sm">
+            {% for row in total_por_loja.itertuples() %}
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2">{{ row.codigo_loja }}</td>
+              <td class="px-4 py-2">{{ row.Estoque }}</td>
+              <td class="px-4 py-2">
+                <a href="{{ url_for('analise_detalhada', codigo_loja=row.codigo_loja, nome_sub_grupo=filtro_sub_grupo, nome_secao=filtro_secao, nome_produto=filtro_produto) }}"
+                   class="text-blue-600 hover:underline">Ver detalhes</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
         </table>
+      </div>
     {% elif filtro_sub_grupo or filtro_secao or filtro_produto %}
-        <p>Nenhum estoque encontrado para o filtro selecionado.</p>
+      <p class="text-red-600 mb-6">Nenhum estoque encontrado para o filtro selecionado.</p>
     {% else %}
-        <p>Selecione ao menos um filtro para ver a análise.</p>
+      <p class="text-gray-600 mb-6">Selecione ao menos um filtro para ver a análise.</p>
     {% endif %}
 
-    <br>
-    <a href="{{ url_for('index') }}">Voltar para Upload</a>
+    <!-- 🔗 Links -->
+    <div class="flex gap-4 mb-12">
+      <a href="{{ url_for('index') }}" class="text-blue-600 hover:underline">⬅ Voltar para Upload</a>
+      <a href="{{ url_for('classificar_cores') }}" class="text-blue-600 hover:underline">🎨 Classificar Cores Manualmente</a>
+    </div>
+
+    <!-- 🔁 Recomendações -->
+    {% if recomendacoes %}
+    <div class="mb-10">
+      <h2 class="text-2xl font-semibold mb-4">📦 Comparativo de Faltas e Sobras</h2>
+      <p class="text-sm text-gray-500 mb-2">Sugestões de Remanejamento</p>
+      <div class="overflow-x-auto shadow rounded">
+        <table class="min-w-full bg-white divide-y divide-gray-200 text-sm">
+          <thead class="bg-gray-100 text-gray-700 font-medium">
+            <tr>
+              <th class="px-4 py-3 text-left">Cor Pai</th>
+              <th class="px-4 py-3 text-left">Tamanho</th>
+              <th class="px-4 py-3 text-left">Loja Origem (Sobra)</th>
+              <th class="px-4 py-3 text-left">Loja Destino (Falta)</th>
+              <th class="px-4 py-3 text-left">Quantidade Sugerida</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for rec in recomendacoes %}
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2">{{ rec.cor_pai }}</td>
+              <td class="px-4 py-2">{{ rec.tamanho }}</td>
+              <td class="px-4 py-2">{{ rec.loja_origem }}</td>
+              <td class="px-4 py-2">{{ rec.loja_destino }}</td>
+              <td class="px-4 py-2">{{ rec.quantidade }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
 </body>
 </html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Detalhe Loja {{ codigo_loja }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800 px-4 py-6">
+
+  <div class="max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold mb-2">Detalhe Loja {{ codigo_loja }}</h2>
+
+    <p class="mb-6 text-sm text-gray-600">
+      <span class="font-semibold">Subgrupo:</span> {{ filtro_sub_grupo }} |
+      <span class="font-semibold">Seção:</span> {{ filtro_secao }} |
+      <span class="font-semibold">Produto:</span> {{ filtro_produto }}
+    </p>
+
+    <!-- 📦 GRADE COMPLETA -->
+    <div class="mb-10">
+      <h3 class="text-xl font-semibold mb-2">📦 Grade Completa - Estoque por Cor Pai e Tamanho</h3>
+      <div class="overflow-x-auto rounded shadow">
+        <table class="min-w-full divide-y divide-gray-200 bg-white">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Cor Pai</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Tamanho</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Estoque</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for item in grade %}
+            <tr>
+              <td class="px-4 py-2">{{ item.cor_pai }}</td>
+              <td class="px-4 py-2">{{ item.tamanho }}</td>
+              <td class="px-4 py-2">{{ item.Estoque }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ✅ SOBRAS -->
+    <div class="mb-10">
+      <h3 class="text-xl font-semibold mb-2">✅ Sobras (mais de 1 peça)</h3>
+      <div class="overflow-x-auto rounded shadow">
+        <table class="min-w-full divide-y divide-gray-200 bg-white">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Cor Pai</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Tamanho</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Estoque</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in sobras %}
+            <tr>
+              <td class="px-4 py-2">{{ row.cor_pai }}</td>
+              <td class="px-4 py-2">{{ row.tamanho }}</td>
+              <td class="px-4 py-2">{{ row.Estoque }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ❌ FALTAS -->
+    <div class="mb-10">
+      <h3 class="text-xl font-semibold mb-2">❌ Faltas (estoque zerado)</h3>
+      <div class="overflow-x-auto rounded shadow">
+        <table class="min-w-full divide-y divide-gray-200 bg-white">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Cor Pai</th>
+              <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Tamanho</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in faltas %}
+            <tr>
+              <td class="px-4 py-2">{{ row.cor_pai }}</td>
+              <td class="px-4 py-2">{{ row.tamanho }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 🔙 Voltar -->
+    <div class="mt-6">
+      <a href="{{ url_for('analise') }}?nome_sub_grupo={{ filtro_sub_grupo }}&nome_secao={{ filtro_secao }}&nome_produto={{ filtro_produto }}"
+         class="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+         🔙 Voltar para análise
+      </a>
+    </div>
+  </div>
+
+</body>
+</html>
