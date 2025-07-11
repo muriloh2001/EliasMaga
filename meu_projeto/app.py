@@ -1,8 +1,7 @@
 from flask import Flask, request, render_template
 import pandas as pd
 import os
-from flask import redirect, url_for
-from flask import Flask, request, render_template, redirect, url_for, flash
+from flask import redirect, url_for, flash
 
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta_aqui'
@@ -32,7 +31,6 @@ MAPEAMENTO_AUTOMATICO = {
 }
 
 # =================== Funções de persistência ===================
-
 def carregar_mapeamento_csv():
     if os.path.exists(MAPEAMENTO_CSV):
         return pd.read_csv(MAPEAMENTO_CSV).set_index('cor_1')['cor_pai'].to_dict()
@@ -45,7 +43,6 @@ def salvar_mapeamento_csv(dicionario):
 mapeamento_cores = carregar_mapeamento_csv()
 
 # =================== Classificação de cor ===================
-
 def classificar_cor_pai(cor):
     if pd.isna(cor):
         return 'Desconhecido'
@@ -64,6 +61,32 @@ def classificar_cor_pai(cor):
 
     return 'Outras'
 
+# =================== Configurações de Leitura ===================
+COLUNAS_RELEVANTES = [
+    'codigo_produto', 'nome_produto', 'codigo_loja', 'fornecedor',
+    'nome_grupo', 'nome_sub_grupo', 'nome_departamento', 'nome_secao',
+    'cor_1', 'cor_2', 'cor_3', 'tamanho', 'Estoque', 'Venda', 'Total', '%Total'
+]
+
+TIPOS_COLUNAS = {
+    'codigo_produto': 'str',
+    'nome_produto': 'category',
+    'codigo_loja': 'int32',
+    'fornecedor': 'category',
+    'nome_grupo': 'category',
+    'nome_sub_grupo': 'category',
+    'nome_departamento': 'category',
+    'nome_secao': 'category',
+    'cor_1': 'category',
+    'cor_2': 'category',
+    'cor_3': 'category',
+    'tamanho': 'category',
+    'Estoque': 'int16',
+    'Venda': 'float32',
+    'Total': 'float32',
+    '%Total': 'float32'
+}
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global df_global
@@ -75,9 +98,17 @@ def index():
             arquivo.save(caminho)
 
             if arquivo.filename.endswith('.csv'):
-                df_global = pd.read_csv(caminho)
+                df_global = pd.read_csv(
+                    caminho,
+                    usecols=COLUNAS_RELEVANTES,
+                    dtype=TIPOS_COLUNAS
+                )
             elif arquivo.filename.endswith(('.xls', '.xlsx')):
-                df_global = pd.read_excel(caminho)
+                df_global = pd.read_excel(
+                    caminho,
+                    usecols=COLUNAS_RELEVANTES,
+                    dtype=TIPOS_COLUNAS
+                )
             else:
                 flash("Formato de arquivo não suportado!", "error")
                 return redirect(url_for('index'))
@@ -143,7 +174,6 @@ def analise():
     filtro_secao = request.form.get('nome_secao') or request.args.get('nome_secao', '')
     filtro_produto = request.form.get('nome_produto') or request.args.get('nome_produto', '')
 
-
     df_filtrado = df_global.copy()
 
     if filtro_sub_grupo:
@@ -183,23 +213,23 @@ def analise():
 
         for cor in todas_cores:
             for tam in todos_tamanhos:
-                sobras_deposito = df_completo[
-                    (df_completo['cor_pai'] == cor) &
+                sobras_deposito = df_completo[(
+                    df_completo['cor_pai'] == cor) &
                     (df_completo['tamanho'] == tam) &
                     (df_completo['status'] == 'sobra') &
                     (df_completo['codigo_loja'] == 99)
                 ]
 
-                sobras_lojas = df_completo[
-                    (df_completo['cor_pai'] == cor) &
+                sobras_lojas = df_completo[(
+                    df_completo['cor_pai'] == cor) &
                     (df_completo['tamanho'] == tam) &
                     (df_completo['status'] == 'sobra') &
                     (df_completo['codigo_loja'] != 99) &
                     (df_completo['codigo_loja'] != 98)
                 ]
 
-                faltas = df_completo[
-                    (df_completo['cor_pai'] == cor) &
+                faltas = df_completo[(
+                    df_completo['cor_pai'] == cor) &
                     (df_completo['tamanho'] == tam) &
                     (df_completo['status'] == 'falta') &
                     (df_completo['codigo_loja'] != 98)
@@ -275,7 +305,7 @@ def analise():
         df_completo=df_completo_html
     )
 
-@app.route('/analise_detalhada/<codigo_loja>')
+@app.route('/analise_detalhada/<codigo_loja>') 
 def analise_detalhada(codigo_loja):
     global df_global
 
@@ -318,7 +348,6 @@ def analise_detalhada(codigo_loja):
     agrupado_loja = df_loja.groupby(['cor_pai', 'tamanho'])['Estoque'].sum().reset_index()
 
     # Para montar a grade completa: para cada cor_pai, pegar os tamanhos existentes no grupo filtrado (independente da loja)
-    # Vamos usar df_filtrado para pegar as combinações possíveis
     cores_tamanhos_por_cor = df_filtrado.groupby('cor_pai')['tamanho'].unique().to_dict()
 
     # Monta lista de tuplas cor_pai x tamanho baseado na combinação real por cor
@@ -330,26 +359,47 @@ def analise_detalhada(codigo_loja):
     # Cria DataFrame com todas as combinações possíveis para o grupo filtrado
     df_completo = pd.DataFrame(combinacoes, columns=['cor_pai', 'tamanho'])
 
+    # Padroniza tamanho para evitar espaços e letras minúsculas
+    df_completo['tamanho'] = df_completo['tamanho'].str.strip().str.upper()
+    agrupado_loja['tamanho'] = agrupado_loja['tamanho'].str.strip().str.upper()
+
     # Junta o estoque da loja, se existir, senão preenche com zero
     df_completo = df_completo.merge(agrupado_loja, on=['cor_pai', 'tamanho'], how='left')
     df_completo['Estoque'] = df_completo['Estoque'].fillna(0).astype(int)
 
-    # Sobras e faltas para exibir separadamente (opcional)
-   # Remove estoques negativos, se existirem
-    df_completo = df_completo[df_completo['Estoque'] >= 0]
+    # Convertendo para formato pivô (tamanhos como colunas)
+    df_completo_pivot = df_completo.pivot_table(index='cor_pai', columns='tamanho', values='Estoque', aggfunc='sum', fill_value=0)
 
-    # Grade: apenas estoques positivos (> 0)
-    grade = df_completo[df_completo['Estoque'] > 0].to_dict(orient='records')
+    # Sobras e faltas para exibir separadamente
+    sobras = df_completo[df_completo['Estoque'] > 1].to_dict(orient='records')  # Estoque > 1
+    faltas = df_completo[df_completo['Estoque'] == 0].to_dict(orient='records')  # Estoque == 0
 
-    # Sobras: estoque > 1
-    sobras = df_completo[df_completo['Estoque'] > 1].to_dict(orient='records')
+    # Ordem desejada (você pode adicionar mais se quiser)
+    ordem_tamanhos_personalizada = ['PP', 'P', 'M', 'G', 'GG', 'XGG', 'G1', 'G2', 'G3', 'G4']
 
-    # Faltas: estoque == 0
-    faltas = df_completo[df_completo['Estoque'] == 0].to_dict(orient='records')
+    # Obtém tamanhos únicos já padronizados
+    tamanhos_unicos = df_completo['tamanho'].unique().tolist()
 
-    # DEBUG
-    print("📦 Grade completa da loja", codigo_loja)
-    print(df_completo.head())
+    # Separa tamanhos alfabéticos e numéricos
+    tamanhos_letras = [t for t in tamanhos_unicos if not t.isdigit()]
+    tamanhos_numericos = [t for t in tamanhos_unicos if t.isdigit()]
+
+    # Função para chave de ordenação usando a ordem personalizada
+    def chave_tamanho(x):
+        try:
+            return ordem_tamanhos_personalizada.index(x)
+        except ValueError:
+            # Se não estiver na lista, colocar após os listados e ordenar alfabeticamente
+            return len(ordem_tamanhos_personalizada) + ord(x[0]) if x else 9999
+
+    # Ordena os tamanhos
+    tamanhos_letras_ordenados = sorted(tamanhos_letras, key=chave_tamanho)
+    tamanhos_numericos_ordenados = sorted(tamanhos_numericos, key=lambda x: int(x))
+
+    todos_tamanhos = tamanhos_letras_ordenados + tamanhos_numericos_ordenados
+
+    # Converter a grade para dicionário para enviar para o template
+    grade = df_completo_pivot.to_dict(orient='index')
 
     return render_template(
         'analise_detalhada.html',
@@ -359,8 +409,10 @@ def analise_detalhada(codigo_loja):
         filtro_produto=filtro_produto,
         grade=grade,
         sobras=sobras,
-        faltas=faltas
+        faltas=faltas,
+        todos_tamanhos=todos_tamanhos,  # Passando todos os tamanhos para o template
     )
+
 
 if __name__ == '__main__':
     app.run(debug=True)

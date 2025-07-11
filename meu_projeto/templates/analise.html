@@ -9,7 +9,7 @@
 
   <div class="max-w-7xl mx-auto">
 
-    <h1 class="text-3xl font-bold mb-6">📊 Análise por Loja</h1>
+    <h1 class="text-3xl font-bold mb-6 text-center">📊 Análise por Loja</h1>
 
     <!-- 🔎 Formulário de Filtros -->
     <form method="POST" class="bg-white p-6 rounded shadow mb-8 space-y-4">
@@ -17,7 +17,7 @@
         <!-- Subgrupo -->
         <div>
           <label for="nome_sub_grupo" class="block text-sm font-medium text-gray-700">Subgrupo</label>
-          <select name="nome_sub_grupo" id="nome_sub_grupo" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+          <select name="nome_sub_grupo" id="nome_sub_grupo" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 transition">
             <option value="">-- Todos --</option>
             {% for sub in sub_grupos %}
               <option value="{{ sub }}" {% if sub == filtro_sub_grupo %}selected{% endif %}>{{ sub }}</option>
@@ -28,7 +28,7 @@
         <!-- Seção -->
         <div>
           <label for="nome_secao" class="block text-sm font-medium text-gray-700">Seção</label>
-          <select name="nome_secao" id="nome_secao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+          <select name="nome_secao" id="nome_secao" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 transition">
             <option value="">-- Todos --</option>
             {% for sec in secoes %}
               <option value="{{ sec }}" {% if sec == filtro_secao %}selected{% endif %}>{{ sec }}</option>
@@ -39,7 +39,7 @@
         <!-- Produto -->
         <div>
           <label for="nome_produto" class="block text-sm font-medium text-gray-700">Produto</label>
-          <select name="nome_produto" id="nome_produto" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+          <select name="nome_produto" id="nome_produto" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 transition">
             <option value="">-- Todos --</option>
             {% for produto in produtos %}
               <option value="{{ produto }}" {% if produto == filtro_produto %}selected{% endif %}>{{ produto }}</option>
@@ -48,10 +48,16 @@
         </div>
       </div>
 
-      <button type="submit" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+      <button type="submit" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition w-full md:w-auto">
         Filtrar
       </button>
     </form>
+
+    <!-- 🔄 Indicador de Carregamento -->
+    <div id="loading" class="hidden text-center mb-6">
+      <div class="loader"></div>
+      <p class="text-gray-600">Carregando análise...</p>
+    </div>
 
     <!-- 📦 Tabela Principal -->
     {% if tem_dados %}
@@ -79,13 +85,13 @@
         </table>
       </div>
     {% elif filtro_sub_grupo or filtro_secao or filtro_produto %}
-      <p class="text-red-600 mb-6">Nenhum estoque encontrado para o filtro selecionado.</p>
+      <p class="text-red-600 mb-6 text-center">Nenhum estoque encontrado para o filtro selecionado.</p>
     {% else %}
-      <p class="text-gray-600 mb-6">Selecione ao menos um filtro para ver a análise.</p>
+      <p class="text-gray-600 mb-6 text-center">Selecione ao menos um filtro para ver a análise.</p>
     {% endif %}
 
     <!-- 🔗 Links -->
-    <div class="flex gap-4 mb-12">
+    <div class="flex gap-4 mb-12 justify-center">
       <a href="{{ url_for('index') }}" class="text-blue-600 hover:underline">⬅ Voltar para Upload</a>
       <a href="{{ url_for('classificar_cores') }}" class="text-blue-600 hover:underline">🎨 Classificar Cores Manualmente</a>
     </div>
@@ -122,6 +128,22 @@
     </div>
     {% endif %}
   </div>
+
+  <style>
+    .loader {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 2s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 
 </body>
 </html>

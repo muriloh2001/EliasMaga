@@ -2,20 +2,25 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Upload de Arquivo</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
             background-color: #f4f6f9;
             margin: 0;
             padding: 40px;
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
+            height: 100vh;
         }
 
         h1 {
             color: #333;
+            font-size: 2rem;
+            margin-bottom: 20px;
         }
 
         .flash-messages {
@@ -24,6 +29,7 @@
             border-radius: 5px;
             width: 100%;
             max-width: 500px;
+            animation: fadeIn 0.5s ease;
         }
 
         .flash-messages li {
@@ -53,21 +59,26 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
+            text-align: center;
         }
 
         input[type="file"] {
             border: 1px solid #ccc;
-            padding: 10px;
+            padding: 12px;
             border-radius: 4px;
+            font-size: 16px;
+            background-color: #f9f9f9;
         }
 
         button {
-            padding: 10px;
+            padding: 12px;
             background-color: #0066cc;
             color: white;
             border: none;
             border-radius: 4px;
+            font-size: 16px;
             cursor: pointer;
+            transition: background-color 0.3s ease;
         }
 
         button:hover {
@@ -76,12 +87,32 @@
 
         .link-button {
             margin-top: 20px;
-            text-align: center;
         }
 
         .link-button a {
             text-decoration: none;
         }
+
+        /* Loading Spinner */
+        .loading {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .loading.show {
+            display: block;
+            text-align: center;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -98,15 +129,37 @@
         {% endif %}
     {% endwith %}
 
-    <form method="POST" enctype="multipart/form-data">
+    <form method="POST" enctype="multipart/form-data" id="uploadForm">
         <input type="file" name="file" required>
-        <button type="submit">Enviar</button>
+        <button type="submit" id="submitButton">Enviar</button>
     </form>
+
+    <div class="loading" id="loadingSpinner">
+        <img src="https://i.gifer.com/4V0V.gif" alt="Carregando..." width="50">
+        <p>Carregando...</p>
+    </div>
 
     <div class="link-button">
         <a href="{{ url_for('analise') }}">
             <button>Ir para Análise</button>
         </a>
     </div>
+
+    <script>
+        // Mostra o indicador de carregamento e altera o texto do botão
+        const uploadForm = document.getElementById('uploadForm');
+        const submitButton = document.getElementById('submitButton');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        
+        uploadForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            submitButton.disabled = true; // Desabilita o botão de envio
+            submitButton.innerHTML = 'Enviando...';
+            loadingSpinner.classList.add('show'); // Exibe o indicador de carregamento
+            
+            // Submete o formulário
+            this.submit();
+        });
+    </script>
 </body>
 </html>
