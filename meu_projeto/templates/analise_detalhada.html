@@ -30,7 +30,7 @@
               <th class="px-4 py-3 text-left">Cor Pai</th>
               <!-- Adiciona os Tamanhos como colunas -->
               {% for tamanho in todos_tamanhos %}
-                <th class="px-4 py-3 text-left">{{ tamanho }}</th>
+                <th class="px-4 py-3 text-center">{{ tamanho }}</th>
               {% endfor %}
             </tr>
           </thead>
@@ -110,9 +110,32 @@
     <!-- 🔙 Voltar -->
     <div class="mt-6 text-center">
       <a href="{{ url_for('analise') }}?nome_sub_grupo={{ filtro_sub_grupo }}&nome_secao={{ filtro_secao }}&nome_produto={{ filtro_produto }}"
-         class="inline-block bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 transition">
-         🔙 Voltar para Análise
+   class="inline-block bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 transition"
+   onclick="this.innerText='⏳ Carregando...';">
+   🔙 Voltar para Análise
+</a>
+
+      <!-- Botão para baixar PDF de Sobras -->
+      <a href="{{ url_for('download_pdf_sobras', codigo_loja=codigo_loja) }}?nome_sub_grupo={{ filtro_sub_grupo }}&nome_secao={{ filtro_secao }}&nome_produto={{ filtro_produto }}" class="inline-block">
+        <button type="button" 
+                class="bg-yellow-500 text-white px-6 py-3 rounded hover:bg-yellow-600 transition">
+          📥 Baixar PDF das Sobras
+        </button>
       </a>
+
+
+      <!-- Botão para baixar PDF de Faltas -->
+      <form action="{{ url_for('download_pdf_faltas', codigo_loja=codigo_loja) }}" method="get" class="inline-block">
+        <input type="hidden" name="nome_sub_grupo" value="{{ filtro_sub_grupo }}">
+        <input type="hidden" name="nome_secao" value="{{ filtro_secao }}">
+        <input type="hidden" name="nome_produto" value="{{ filtro_produto }}">
+        <button type="submit" class="bg-red-600 text-white px-6 py-3 rounded hover:bg-red-700 transition">
+          📥 Baixar PDF de Faltas
+        </button>
+      </form>
+
+
+
     </div>
   </div>
 

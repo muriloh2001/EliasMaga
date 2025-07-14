@@ -96,38 +96,45 @@
       <a href="{{ url_for('classificar_cores') }}" class="text-blue-600 hover:underline">🎨 Classificar Cores Manualmente</a>
     </div>
 
-    <!-- 🔁 Recomendações -->
     {% if recomendacoes %}
-    <div class="mb-10">
-      <h2 class="text-2xl font-semibold mb-4">📦 Comparativo de Faltas e Sobras</h2>
-      <p class="text-sm text-gray-500 mb-2">Sugestões de Remanejamento</p>
-      <div class="overflow-x-auto shadow rounded">
-        <table class="min-w-full bg-white divide-y divide-gray-200 text-sm">
-          <thead class="bg-gray-100 text-gray-700 font-medium">
-            <tr>
-              <th class="px-4 py-3 text-left">Cor Pai</th>
-              <th class="px-4 py-3 text-left">Tamanho</th>
-              <th class="px-4 py-3 text-left">Loja Origem (Sobra)</th>
-              <th class="px-4 py-3 text-left">Loja Destino (Falta)</th>
-              <th class="px-4 py-3 text-left">Quantidade Sugerida</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            {% for rec in recomendacoes %}
-            <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2">{{ rec.cor_pai }}</td>
-              <td class="px-4 py-2">{{ rec.tamanho }}</td>
-              <td class="px-4 py-2">{{ rec.loja_origem }}</td>
-              <td class="px-4 py-2">{{ rec.loja_destino }}</td>
-              <td class="px-4 py-2">{{ rec.quantidade }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div class="mb-10">
+        <h2 class="text-2xl font-semibold mb-4">📦 Comparativo de Faltas e Sobras</h2>
+        <p class="text-sm text-gray-500 mb-2">Sugestões de Remanejamento</p>
+        <div class="overflow-x-auto shadow rounded">
+          <table class="min-w-full bg-white divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-100 text-gray-700 font-medium">
+              <tr>
+                <th class="px-4 py-3 text-left">Cor Pai</th>
+                <th class="px-4 py-3 text-left">Tamanho</th>
+                <th class="px-4 py-3 text-left">Loja Origem (Sobra)</th>
+                <th class="px-4 py-3 text-left">Loja Destino (Falta)</th>
+                <th class="px-4 py-3 text-left">Quantidade Sugerida</th>
+              </tr>
+            </thead>
+            <tbody id="recomendacoes-container" class="divide-y divide-gray-100">
+              {% for rec in recomendacoes %}
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-2">{{ rec.cor_pai }}</td>
+                <td class="px-4 py-2">{{ rec.tamanho }}</td>
+                <td class="px-4 py-2">{{ rec.loja_origem }}</td>
+                <td class="px-4 py-2">{{ rec.loja_destino }}</td>
+                <td class="px-4 py-2">{{ rec.quantidade }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if total_recomendacoes > 20 %}
+        <div class="text-center mt-4">
+          <button id="carregarMais" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+            Carregar mais
+          </button>
+        </div>
+        {% endif %}
       </div>
-    </div>
-    {% endif %}
-  </div>
+      {% endif %}
+
 
   <style>
     .loader {
@@ -144,6 +151,43 @@
       100% { transform: rotate(360deg); }
     }
   </style>
+<script>
+  let pagina = 2;
+
+  document.getElementById('carregarMais')?.addEventListener('click', async () => {
+    const btn = document.getElementById('carregarMais');
+    btn.disabled = true;
+    btn.innerText = 'Carregando...';
+
+    const url = `/carregar_recomendacoes?pagina=${pagina}&nome_sub_grupo={{ filtro_sub_grupo | urlencode }}&nome_secao={{ filtro_secao | urlencode }}&nome_produto={{ filtro_produto | urlencode }}`;
+    
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (data.recomendacoes.length === 0) {
+      btn.innerText = "Fim das sugestões";
+      return;
+    }
+
+    const container = document.getElementById('recomendacoes-container');
+    data.recomendacoes.forEach(rec => {
+      const row = `
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-2">${rec.cor_pai}</td>
+          <td class="px-4 py-2">${rec.tamanho}</td>
+          <td class="px-4 py-2">${rec.loja_origem}</td>
+          <td class="px-4 py-2">${rec.loja_destino}</td>
+          <td class="px-4 py-2">${rec.quantidade}</td>
+        </tr>
+      `;
+      container.insertAdjacentHTML('beforeend', row);
+    });
+
+    pagina++;
+    btn.disabled = false;
+    btn.innerText = 'Carregar mais';
+  });
+</script>
 
 </body>
 </html>

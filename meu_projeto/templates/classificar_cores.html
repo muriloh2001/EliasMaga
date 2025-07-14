@@ -127,7 +127,14 @@
         <button type="submit">Salvar Classificações</button>
     </form>
 
-    <a href="{{ url_for('index') }}">← Voltar</a>
+<!-- 🔙 Voltar -->
+    <div class="mt-6 text-center">
+      <a href="{{ url_for('analise') }}?nome_sub_grupo={{ filtro_sub_grupo }}&nome_secao={{ filtro_secao }}&nome_produto={{ filtro_produto }}"
+   class="inline-block bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 transition"
+   onclick="this.innerText='⏳ Carregando...';">
+   🔙 Voltar para Análise
+</a>
+
 
 </body>
 </html>
