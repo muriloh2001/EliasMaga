@@ -1,282 +1,19 @@
-from flask import Flask, request, render_template
-import pandas as pd
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, send_file
+from io import BytesIO
 import os
-from flask import redirect, url_for, flash
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from io import BytesIO
-from flask import send_file
-from flask import jsonify
+import pandas as pd
 from fpdf import FPDF
-from io import BytesIO
-from flask_caching import Cache
 
-app = Flask(__name__)
-app.secret_key = 'sua_chave_secreta_aqui'
-app.config['UPLOAD_FOLDER'] = 'uploads'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})  # memória local
+from app import app, df_global, mapeamento_cores
+from config import COLUNAS_RELEVANTES, TIPOS_COLUNAS
+from utils.classificacao import classificar_cor_pai, salvar_mapeamento_csv
+from utils.filtros import get_df_filtrado
+from utils.estoque import calcular_sobras_por_loja
+from utils.relatorios import gerar_pdf_sobras
 
-df_global = None
-MAPEAMENTO_CSV = 'mapeamento_cores.csv'
+routes_bp = Blueprint('routes_bp', __name__)
 
-MAPEAMENTO_AUTOMATICO = {
-    'azul': 'Azul',
-    'marinho': 'Marinho',
-    'verde': 'Verde',
-    'militar': 'Verde',
-    'preto': 'Preto',
-    'branco': 'Branco',
-    'vermelho': 'Vermelho',
-    'rosa': 'Rosa',
-    'cinza': 'Cinza',
-    'amarelo': 'Amarelo',
-    'bege': 'Bege',
-    'laranja': 'Laranja',
-    'roxo': 'Roxo',
-    'bordô': 'Vermelho',
-    'marrom': 'Marrom'
-}
-
-def carregar_mapeamento_csv():
-    if os.path.exists(MAPEAMENTO_CSV):
-        return pd.read_csv(MAPEAMENTO_CSV).set_index('cor_1')['cor_pai'].to_dict()
-    return {}
-
-def salvar_mapeamento_csv(dicionario):
-    df = pd.DataFrame(list(dicionario.items()), columns=['cor_1', 'cor_pai'])
-    df.to_csv(MAPEAMENTO_CSV, index=False)
-
-mapeamento_cores = carregar_mapeamento_csv()
-
-def classificar_cor_pai(cor):
-    if pd.isna(cor):
-        return 'Desconhecido'
-
-    cor_lower = cor.lower().strip()
-
-    for key in mapeamento_cores:
-        if key.lower().strip() == cor_lower:
-            return mapeamento_cores[key]
-
-    for palavra, cor_pai in MAPEAMENTO_AUTOMATICO.items():
-        if palavra in cor_lower:
-            return cor_pai
-
-    return 'Outras'
-
-@cache.memoize(timeout=600)  # 10 minutos
-def get_df_filtrado(filtro_sub_grupo, filtro_secao, filtro_produto):
-    df = df_global.copy()
-    if filtro_sub_grupo:
-        df = df[df['nome_sub_grupo'] == filtro_sub_grupo]
-    if filtro_secao:
-        df = df[df['nome_secao'] == filtro_secao]
-    if filtro_produto:
-        df = df[df['nome_produto'] == filtro_produto]
-    return df
-
-
-def calcular_sobras_por_loja(df_global, codigo_loja_int, filtro_sub_grupo='', filtro_secao='', filtro_produto=''):
-    df_filtrado = df_global.copy()
-
-    if filtro_sub_grupo:
-        df_filtrado = df_filtrado[df_filtrado['nome_sub_grupo'] == filtro_sub_grupo]
-    if filtro_secao:
-        df_filtrado = df_filtrado[df_filtrado['nome_secao'] == filtro_secao]
-    if filtro_produto:
-        df_filtrado = df_filtrado[df_filtrado['nome_produto'] == filtro_produto]
-
-    df_loja = df_filtrado[df_filtrado['codigo_loja'] == codigo_loja_int].copy()  # <-- copy aqui
-
-    agrupado_loja = df_loja.groupby(['cor_pai', 'tamanho'], observed=False)['Estoque'].sum().reset_index()
-
-    # Padronizar tamanho
-    agrupado_loja['tamanho'] = agrupado_loja['tamanho'].str.strip().str.upper()
-
-    cores_tamanhos_por_cor = df_filtrado.groupby('cor_pai', observed=False)['tamanho'].unique().to_dict()
-
-    combinacoes = [(cor, tam) for cor, tamanhos in cores_tamanhos_por_cor.items() for tam in tamanhos]
-
-    df_completo = pd.DataFrame(combinacoes, columns=['cor_pai', 'tamanho'])
-    df_completo['tamanho'] = df_completo['tamanho'].str.strip().str.upper()
-    df_completo['cor_pai'] = df_completo['cor_pai'].str.strip().str.upper()
-
-    df_completo = df_completo.merge(agrupado_loja, on=['cor_pai', 'tamanho'], how='left')
-    df_completo['Estoque'] = df_completo['Estoque'].fillna(0).astype(int)
-
-    sobras = df_completo[df_completo['Estoque'] > 1].to_dict(orient='records')
-    return sobras
-
-def gerar_pdf_sobras(sobras):
-    # Criar um buffer em memória
-    buffer = BytesIO()
-
-    # Criar o objeto PDF
-    c = canvas.Canvas(buffer, pagesize=letter)
-    c.setFont("Helvetica", 12)
-
-    # Título
-    c.drawString(200, 750, "Relatório de Sobras")
-
-    # Sobras
-    c.drawString(30, 730, "Sobras (mais de 1 peça):")
-    y_position = 710
-    for sobra in sobras:
-        cor_pai = sobra['cor_pai']
-        tamanho = sobra['tamanho']
-        estoque = sobra['Estoque']
-
-        # Adiciona as sobras no PDF
-        c.drawString(30, y_position, f"Cor: {cor_pai}, Tamanho: {tamanho}, Estoque: {estoque}")
-        y_position -= 20
-
-    # Finalizar e gerar o PDF
-    c.showPage()
-    c.save()
-
-    buffer.seek(0)  # Voltar para o início do buffer
-
-    return buffer
-
-def gerar_faltas(df_filtrado, codigo_loja_int):
-    print("🔍 Início da função gerar_faltas")
-
-    # Padroniza
-    df_filtrado['cor_pai'] = df_filtrado['cor_1'].apply(classificar_cor_pai).str.strip().str.upper()
-    df_filtrado['tamanho'] = df_filtrado['tamanho'].astype(str).str.strip().str.upper()
-
-    print("✅ Primeiras linhas de df_filtrado:")
-    print(df_filtrado[['codigo_loja', 'cor_pai', 'tamanho', 'Estoque']].head())
-
-    # Filtra apenas a loja desejada
-    df_loja = df_filtrado[df_filtrado['codigo_loja'] == codigo_loja_int].copy()
-    print(f"🛒 Estoque da loja {codigo_loja_int}:")
-    print(df_loja[['cor_pai', 'tamanho', 'Estoque']].head())
-
-    # Agrupa estoque da loja
-    agrupado_loja = df_loja.groupby(['cor_pai', 'tamanho'], observed=False)['Estoque'].sum().reset_index()
-    print("📦 Estoque agrupado da loja:")
-    print(agrupado_loja)
-
-    # Gera combinações com base no universo filtrado
-    cores_tamanhos_por_cor = df_filtrado.groupby('cor_pai')['tamanho'].unique().to_dict()
-    combinacoes = [(cor, tam) for cor, tamanhos in cores_tamanhos_por_cor.items() for tam in tamanhos]
-
-    print("🧩 Combinações possíveis baseadas na grade geral:")
-    print(combinacoes[:10])  # mostra só as primeiras 10
-
-    df_completo = pd.DataFrame(combinacoes, columns=['cor_pai', 'tamanho'])
-    df_completo['tamanho'] = df_completo['tamanho'].str.strip().str.upper()
-    df_completo['cor_pai'] = df_completo['cor_pai'].str.strip().str.upper()
-    agrupado_loja['tamanho'] = agrupado_loja['tamanho'].str.strip().str.upper()
-    agrupado_loja['cor_pai'] = agrupado_loja['cor_pai'].str.strip().str.upper()
-
-    df_completo = df_completo.merge(agrupado_loja, on=['cor_pai', 'tamanho'], how='left')
-
-    print("🔄 Resultado após merge com agrupado_loja:")
-    print(df_completo.head(10))
-
-    df_completo['Estoque'] = df_completo['Estoque'].fillna(0).astype(int)
-
-    # Filtros finais
-    faltas = df_completo[df_completo['Estoque'] == 0].sort_values(by=['cor_pai', 'tamanho'])
-
-    print("🚨 Faltas identificadas:")
-    print(faltas)
-
-    return faltas.to_dict(orient='records')
-
-
-def gerar_pdf_faltas(faltas):
-    from fpdf import FPDF
-
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-
-    pdf.cell(200, 10, txt="Relatório de Faltas", ln=True, align="C")
-    pdf.ln(10)
-
-    for falta in faltas:
-        linha = f"Cor: {falta['cor_pai']}, Tamanho: {falta['tamanho']}"
-        pdf.cell(200, 10, txt=linha, ln=True)
-
-    # Gera o conteúdo do PDF como string Latin1
-    pdf_bytes = pdf.output(dest='S').encode('latin1')
-
-    buffer = BytesIO(pdf_bytes)
-    buffer.seek(0)
-    return buffer
-
-def gerar_pdf_sobras(sobras, codigo_loja=None):
-    class PDF(FPDF):
-        def header(self):
-            self.set_font("Arial", 'B', 14)
-            title = "Relatório de Sobras"
-            if codigo_loja:
-                title += f" - Loja {codigo_loja}"
-            self.cell(0, 10, title, ln=True, align='C')
-            self.ln(5)
-
-        def footer(self):
-            self.set_y(-15)
-            self.set_font("Arial", 'I', 8)
-            self.cell(0, 10, f'Página {self.page_no()}', align='C')
-
-    pdf = PDF()
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 12)
-    
-    # Cabeçalho da tabela com cor de fundo
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_text_color(0)
-    pdf.set_draw_color(200, 200, 200)
-    
-    pdf.cell(83, 10, "Cor Pai", 1, 0, 'C', True)
-    pdf.cell(71, 10, "Tamanho", 1, 0, 'C', True)
-    pdf.cell(36, 10, "Estoque", 1, 1, 'C', True)
-
-    pdf.set_font("Arial", '', 11)
-    for sobra in sobras:
-        pdf.cell(83, 8, sobra['cor_pai'], 1, 0, 'C')
-        pdf.cell(71, 8, sobra['tamanho'], 1, 0, 'C')
-        pdf.cell(36, 8, str(sobra['Estoque']), 1, 1, 'C')
-
-
-    pdf_bytes = pdf.output(dest='S').encode('latin1')
-    buffer = BytesIO(pdf_bytes)
-    buffer.seek(0)
-    return buffer
-
-
-# =================== Configurações de Leitura ===================
-COLUNAS_RELEVANTES = [
-    'codigo_produto', 'nome_produto', 'codigo_loja', 'fornecedor',
-    'nome_grupo', 'nome_sub_grupo', 'nome_departamento', 'nome_secao',
-    'cor_1', 'cor_2', 'cor_3', 'tamanho', 'Estoque', 'Venda', 'Total', '%Total'
-]
-
-TIPOS_COLUNAS = {
-    'codigo_produto': 'str',
-    'nome_produto': 'category',
-    'codigo_loja': 'int32',
-    'fornecedor': 'category',
-    'nome_grupo': 'category',
-    'nome_sub_grupo': 'category',
-    'nome_departamento': 'category',
-    'nome_secao': 'category',
-    'cor_1': 'category',
-    'cor_2': 'category',
-    'cor_3': 'category',
-    'tamanho': 'category',
-    'Estoque': 'int16',
-    'Venda': 'float32',
-    'Total': 'float32',
-    '%Total': 'float32'
-}
-
-@app.route('/', methods=['GET', 'POST'])
+@routes_bp.route('/', methods=['GET', 'POST'])
 def index():
     global df_global
 
@@ -315,14 +52,14 @@ def index():
                 flash(f"Atenção! Existem {len(cores_novas)} cores ainda não classificadas. Você pode classificá-las agora ou continuar.", "warning")
 
             flash("Arquivo carregado com sucesso!", "success")
-            return redirect(url_for('analise'))  # Sempre segue para análise
+            return redirect(url_for('routes_bp.analise'))  # Sempre segue para análise
 
     return render_template('index.html')
 
 
 
 
-@app.route('/classificar_cores', methods=['GET'])
+@routes_bp.route('/classificar_cores', methods=['GET'])
 def classificar_cores():
     global df_global
 
@@ -337,7 +74,7 @@ def classificar_cores():
 
     return render_template('classificar_cores.html', sugestoes=sugestoes)
 
-@app.route('/atualizar_cores', methods=['POST'])
+@routes_bp.route('/atualizar_cores', methods=['POST'])
 def atualizar_cores():
     global df_global, mapeamento_cores
 
@@ -360,7 +97,7 @@ def atualizar_cores():
 
     return redirect(url_for('index'))
 
-@app.route('/analise', methods=['GET', 'POST'])
+@routes_bp.route('/analise', methods=['GET', 'POST'])
 def analise():
     global df_global
 
@@ -507,7 +244,7 @@ def analise():
         df_completo=df_completo_html
     )
 
-@app.route('/analise_detalhada/<codigo_loja>') 
+@routes_bp.route('/analise_detalhada/<codigo_loja>') 
 def analise_detalhada(codigo_loja):
     global df_global
 
@@ -596,7 +333,7 @@ def analise_detalhada(codigo_loja):
     )
 
 # Ajuste para o código que gera as sobras
-@app.route('/download_pdf_sobras/<codigo_loja>', methods=['GET'])
+@routes_bp.route('/download_pdf_sobras/<codigo_loja>', methods=['GET'])
 def download_pdf_sobras(codigo_loja):
     global df_global
 
@@ -624,7 +361,7 @@ def download_pdf_sobras(codigo_loja):
     )
 
     
-@app.route('/download_pdf_faltas/<codigo_loja>', methods=['GET'])
+@routes_bp.route('/download_pdf_faltas/<codigo_loja>', methods=['GET'])
 def download_pdf_faltas(codigo_loja):
     global df_global
 
@@ -718,7 +455,7 @@ def download_pdf_faltas(codigo_loja):
         mimetype='application/pdf'
     )
 
-@app.route('/carregar_recomendacoes', methods=['GET'])
+@routes_bp.route('/carregar_recomendacoes', methods=['GET'])
 def carregar_recomendacoes():
     global df_global
 
@@ -805,6 +542,3 @@ def carregar_recomendacoes():
         'pagina': pagina,
         'total_paginas': total_paginas
     })
-
-if __name__ == '__main__':
-    app.run(debug=True)

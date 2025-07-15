@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import joblib
-from flask import Flask, render_template, request, session, redirect, send_file
+from flask import Flask, flash, render_template, request, session, redirect, send_file
 import openrouteservice
 from urllib.parse import quote
 from ia_utils import reclassificar_kmeans, atualizar_modelos_e_rotulos
@@ -103,6 +103,10 @@ def analise():
         colunas_merge.append("cor_pai")
 
     dados = dados.merge(rotulos[colunas_merge], on="cor_normalizada", how="left")
+    
+    # Verificar se há cores não classificadas (sem cor_pai)
+    if dados["cor_pai"].isna().any():
+        flash("Há cores não classificadas. Deseja classificar agora?", "warning")
 
     if "cor_pai" not in dados.columns:
         dados["cor_pai"] = None

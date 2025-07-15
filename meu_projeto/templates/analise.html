@@ -76,7 +76,7 @@
               <td class="px-4 py-2">{{ row.codigo_loja }}</td>
               <td class="px-4 py-2">{{ row.Estoque }}</td>
               <td class="px-4 py-2">
-                <a href="{{ url_for('analise_detalhada', codigo_loja=row.codigo_loja, nome_sub_grupo=filtro_sub_grupo, nome_secao=filtro_secao, nome_produto=filtro_produto) }}"
+                <a href="{{ url_for('routes_bp.analise_detalhada', codigo_loja=row.codigo_loja, nome_sub_grupo=filtro_sub_grupo, nome_secao=filtro_secao, nome_produto=filtro_produto) }}"
                    class="text-blue-600 hover:underline">Ver detalhes</a>
               </td>
             </tr>
@@ -92,8 +92,8 @@
 
     <!-- 🔗 Links -->
     <div class="flex gap-4 mb-12 justify-center">
-      <a href="{{ url_for('index') }}" class="text-blue-600 hover:underline">⬅ Voltar para Upload</a>
-      <a href="{{ url_for('classificar_cores') }}" class="text-blue-600 hover:underline">🎨 Classificar Cores Manualmente</a>
+      <a href="{{ url_for('routes_bp.index') }}" class="text-blue-600 hover:underline">⬅ Voltar para Upload</a>
+      <a href="{{ url_for('routes_bp.classificar_cores') }}" class="text-blue-600 hover:underline">🎨 Classificar Cores Manualmente</a>
     </div>
 
     {% if recomendacoes %}
@@ -188,6 +188,42 @@
     btn.innerText = 'Carregar mais';
   });
 </script>
+
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+  window.onload = function () {
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        {% if category == 'warning' %}
+          Swal.fire({
+            icon: 'warning',
+            title: 'Atenção!',
+            html: '{{ message|escape }} <br><br><a href="{{ url_for("routes_bp.classificar_cores") }}" style="color:#3085d6; text-decoration:underline;">Clique aqui para classificar agora</a>',
+            confirmButtonText: 'Ok'
+          });
+        {% elif category == 'success' %}
+          Swal.fire({
+            icon: 'success',
+            title: 'Sucesso!',
+            text: '{{ message|escape }}',
+            confirmButtonText: 'Ok'
+          });
+        {% elif category == 'error' %}
+          Swal.fire({
+            icon: 'error',
+            title: 'Erro!',
+            text: '{{ message|escape }}',
+            confirmButtonText: 'Ok'
+          });
+        {% endif %}
+      {% endfor %}
+    {% endwith %}
+  };
+</script>
+
+
 
 </body>
 </html>
