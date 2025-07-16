@@ -6,6 +6,7 @@ def setup_cache(app):
 
 def get_df_filtrado(df_global, filtro_sub_grupo, filtro_secao, filtro_produto):
     df = df_global.copy()
+
     if filtro_sub_grupo:
         df = df[df['nome_sub_grupo'] == filtro_sub_grupo]
     if filtro_secao:

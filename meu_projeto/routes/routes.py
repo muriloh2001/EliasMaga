@@ -9,7 +9,8 @@ from config import COLUNAS_RELEVANTES, TIPOS_COLUNAS
 from utils.classificacao import classificar_cor_pai, salvar_mapeamento_csv
 from utils.filtros import get_df_filtrado
 from utils.estoque import calcular_sobras_por_loja
-from utils.relatorios import gerar_pdf_sobras
+from utils.relatorios import gerar_pdf_sobras_grade, gerar_pdf_faltas_grade
+
 
 routes_bp = Blueprint('routes_bp', __name__)
 
@@ -39,7 +40,7 @@ def index():
                 flash("Formato de arquivo não suportado!", "error")
                 return redirect(url_for('index'))
 
-            df_global['cor_pai'] = df_global['cor_1'].map(classificar_cor_pai).fillna('Outras').str.upper().str.strip()
+            df_global['cor_pai'] = df_global['cor_1'].apply(classificar_cor_pai).str.strip().str.upper()
             df_global['tamanho'] = df_global['tamanho'].astype(str).str.upper().str.strip()
             df_global['tamanho_num'] = pd.to_numeric(df_global['tamanho'], errors='coerce')
 
@@ -114,7 +115,7 @@ def analise():
     filtro_secao = request.form.get('nome_secao') or request.args.get('nome_secao', '')
     filtro_produto = request.form.get('nome_produto') or request.args.get('nome_produto', '')
 
-    df_filtrado = get_df_filtrado(filtro_sub_grupo, filtro_secao, filtro_produto)
+    df_filtrado = get_df_filtrado(df_global, filtro_sub_grupo, filtro_secao, filtro_produto)
     
     if not df_filtrado.empty:
         total_por_loja = df_filtrado.groupby('codigo_loja')['Estoque'].sum().reset_index()
@@ -272,7 +273,7 @@ def analise_detalhada(codigo_loja):
     if df_filtrado.empty:
         return f"Nenhum dado encontrado para os filtros aplicados."
 
-    df_loja = df_filtrado[df_filtrado['codigo_loja'] == codigo_loja_int]
+    df_loja = df_filtrado[df_filtrado['codigo_loja'] == codigo_loja_int].copy()
 
     if df_loja.empty:
         return f"Nenhum dado encontrado para a loja {codigo_loja} com os filtros aplicados."
@@ -319,6 +320,24 @@ def analise_detalhada(codigo_loja):
 
     todos_tamanhos = tamanhos_letras_ordenados + tamanhos_numericos_ordenados
     grade = df_completo_pivot.to_dict(orient='index')
+    
+        # Grade de sobras e faltas pivotadas
+    pivot_sobras = df_completo[df_completo['Estoque'] > 1].pivot_table(
+        index='cor_pai', columns='tamanho', values='Estoque', aggfunc='sum', fill_value=0)
+
+    pivot_faltas = df_completo[df_completo['Estoque'] == 0].pivot_table(
+        index='cor_pai', columns='tamanho', values='Estoque',
+        aggfunc=lambda x: 'X' if len(x) else '', fill_value=''
+)
+    # Organiza ordem das colunas
+    pivot_sobras = pivot_sobras.reindex(columns=todos_tamanhos, fill_value=0)
+    pivot_faltas = pivot_faltas.reindex(columns=todos_tamanhos, fill_value='')
+
+    # Converte para dicionários para o template
+    grade_sobras = pivot_sobras.to_dict(orient='index')
+    grade_faltas = pivot_faltas.to_dict(orient='index')
+
+
 
     return render_template(
         'analise_detalhada.html',
@@ -330,6 +349,9 @@ def analise_detalhada(codigo_loja):
         sobras=sobras,
         faltas=faltas,
         todos_tamanhos=todos_tamanhos,
+        grade_sobras=grade_sobras,
+        grade_faltas=grade_faltas
+
     )
 
 # Ajuste para o código que gera as sobras
@@ -345,35 +367,7 @@ def download_pdf_sobras(codigo_loja):
     except ValueError:
         return "Código de loja inválido."
 
-    filtro_sub_grupo = request.args.get('nome_sub_grupo', '')
-    filtro_secao = request.args.get('nome_secao', '')
-    filtro_produto = request.args.get('nome_produto', '')
-
-    sobras = calcular_sobras_por_loja(df_global, codigo_loja_int, filtro_sub_grupo, filtro_secao, filtro_produto)
-
-    pdf_buffer = gerar_pdf_sobras(sobras, codigo_loja_int)
-
-    return send_file(
-        pdf_buffer,
-        as_attachment=True,
-        download_name=f"relatorio_sobras_{codigo_loja}.pdf",
-        mimetype='application/pdf'
-    )
-
-    
-@routes_bp.route('/download_pdf_faltas/<codigo_loja>', methods=['GET'])
-def download_pdf_faltas(codigo_loja):
-    global df_global
-
-    if df_global is None:
-        return "Nenhum arquivo carregado ainda."
-
-    try:
-        codigo_loja_int = int(codigo_loja)
-    except ValueError:
-        return "Código de loja inválido."
-
-    # Filtros opcionais
+    # Filtros
     filtro_sub_grupo = request.args.get('nome_sub_grupo', '')
     filtro_secao = request.args.get('nome_secao', '')
     filtro_produto = request.args.get('nome_produto', '')
@@ -386,9 +380,6 @@ def download_pdf_faltas(codigo_loja):
         df_filtrado = df_filtrado[df_filtrado['nome_secao'] == filtro_secao]
     if filtro_produto:
         df_filtrado = df_filtrado[df_filtrado['nome_produto'] == filtro_produto]
-
-    if df_filtrado.empty:
-        return "Nenhum dado encontrado para os filtros aplicados."
 
     df_filtrado['cor_pai'] = df_filtrado['cor_1'].apply(classificar_cor_pai).str.strip().str.upper()
     df_filtrado['tamanho'] = df_filtrado['tamanho'].astype(str).str.strip().str.upper()
@@ -404,52 +395,128 @@ def download_pdf_faltas(codigo_loja):
     combinacoes_todas = [(cor, tam) for cor in cores_unicas for tam in tamanhos_unicos]
 
     df_completo = pd.DataFrame(combinacoes_todas, columns=['cor_pai', 'tamanho'])
-    df_completo['cor_pai'] = df_completo['cor_pai'].str.strip().str.upper()
-    df_completo['tamanho'] = df_completo['tamanho'].astype(str).str.strip().str.upper()
-    agrupado_loja['cor_pai'] = agrupado_loja['cor_pai'].str.strip().str.upper()
-    agrupado_loja['tamanho'] = agrupado_loja['tamanho'].astype(str).str.strip().str.upper()
+    df_completo = df_completo.merge(agrupado_loja, on=['cor_pai', 'tamanho'], how='left')
+    df_completo['Estoque'] = df_completo['Estoque'].fillna(0).astype(int)
+    df_completo['Estoque'] = df_completo['Estoque'].apply(lambda x: max(0, x))
 
+    # GRADE DE SOBRAS
+    df_sobras = df_completo[df_completo['Estoque'] > 1]
+
+    ordem_tamanhos_personalizada = ['PP', 'P', 'M', 'G', 'GG', 'XGG', 'G1', 'G2', 'G3', 'G4']
+    tamanhos_letras = [t for t in tamanhos_unicos if not t.isdigit()]
+    tamanhos_numericos = [t for t in tamanhos_unicos if t.isdigit()]
+
+    def chave_tamanho(x):
+        try:
+            return ordem_tamanhos_personalizada.index(x)
+        except ValueError:
+            return len(ordem_tamanhos_personalizada) + ord(x[0]) if x else 9999
+
+    tamanhos_letras_ordenados = sorted(tamanhos_letras, key=chave_tamanho)
+    tamanhos_numericos_ordenados = sorted(tamanhos_numericos, key=lambda x: int(x))
+
+    todos_tamanhos = tamanhos_letras_ordenados + tamanhos_numericos_ordenados
+
+    pivot_sobras = df_sobras.pivot_table(
+        index='cor_pai', columns='tamanho', values='Estoque', aggfunc='sum', fill_value=0
+    )
+    pivot_sobras = pivot_sobras.reindex(columns=todos_tamanhos, fill_value=0)
+    grade_sobras = pivot_sobras.to_dict(orient='index')
+
+    from utils.relatorios import gerar_pdf_sobras_grade
+    pdf_buffer = gerar_pdf_sobras_grade(grade_sobras, todos_tamanhos, codigo_loja_int, nome_grupo=filtro_sub_grupo)
+
+
+    return send_file(
+        pdf_buffer,
+        as_attachment=True,
+        download_name=f"relatorio_sobras_{codigo_loja}.pdf",
+        mimetype='application/pdf'
+    )
+
+
+    
+@routes_bp.route('/download_pdf_faltas/<codigo_loja>', methods=['GET'])
+def download_pdf_faltas(codigo_loja):
+    global df_global
+
+    if df_global is None:
+        return "Nenhum arquivo carregado ainda."
+
+    try:
+        codigo_loja_int = int(codigo_loja)
+    except ValueError:
+        return "Código de loja inválido."
+
+    # Filtros
+    filtro_sub_grupo = request.args.get('nome_sub_grupo', '')
+    filtro_secao = request.args.get('nome_secao', '')
+    filtro_produto = request.args.get('nome_produto', '')
+
+    df_filtrado = df_global.copy()
+
+    if filtro_sub_grupo:
+        df_filtrado = df_filtrado[df_filtrado['nome_sub_grupo'] == filtro_sub_grupo]
+    if filtro_secao:
+        df_filtrado = df_filtrado[df_filtrado['nome_secao'] == filtro_secao]
+    if filtro_produto:
+        df_filtrado = df_filtrado[df_filtrado['nome_produto'] == filtro_produto]
+
+    df_filtrado['cor_pai'] = df_filtrado['cor_1'].apply(classificar_cor_pai).str.strip().str.upper()
+    df_filtrado['tamanho'] = df_filtrado['tamanho'].astype(str).str.strip().str.upper()
+
+    df_loja = df_filtrado[df_filtrado['codigo_loja'] == codigo_loja_int].copy()
+    df_loja['cor_pai'] = df_loja['cor_pai'].str.strip().str.upper()
+    df_loja['tamanho'] = df_loja['tamanho'].astype(str).str.strip().str.upper()
+
+    agrupado_loja = df_loja.groupby(['cor_pai', 'tamanho'])['Estoque'].sum().reset_index()
+
+    tamanhos_unicos = sorted(df_filtrado['tamanho'].unique())
+    cores_unicas = sorted(df_filtrado['cor_pai'].unique())
+    combinacoes_todas = [(cor, tam) for cor in cores_unicas for tam in tamanhos_unicos]
+
+    df_completo = pd.DataFrame(combinacoes_todas, columns=['cor_pai', 'tamanho'])
     df_completo = df_completo.merge(agrupado_loja, on=['cor_pai', 'tamanho'], how='left')
     df_completo['Estoque'] = df_completo['Estoque'].fillna(0).astype(int)
 
-    faltas = df_completo[df_completo['Estoque'] == 0].sort_values(by=['cor_pai', 'tamanho'])
+    df_faltas = df_completo[df_completo['Estoque'] == 0]
 
-    from fpdf import FPDF
+    # Ordenar tamanhos personalizados
+    ordem_tamanhos_personalizada = ['PP', 'P', 'M', 'G', 'GG', 'XGG', 'G1', 'G2', 'G3', 'G4']
+    tamanhos_letras = [t for t in tamanhos_unicos if not t.isdigit()]
+    tamanhos_numericos = [t for t in tamanhos_unicos if t.isdigit()]
 
-    class PDF(FPDF):
-        def header(self):
-            self.set_font("Arial", 'B', 14)
-            self.cell(0, 10, f"Relatório de Faltas - Loja {codigo_loja}", ln=True, align='C')
-            self.ln(5)
+    def chave_tamanho(x):
+        try:
+            return ordem_tamanhos_personalizada.index(x)
+        except ValueError:
+            return len(ordem_tamanhos_personalizada) + ord(x[0]) if x else 9999
 
-        def footer(self):
-            self.set_y(-15)
-            self.set_font("Arial", 'I', 8)
-            self.cell(0, 10, f'Página {self.page_no()}', align='C')
+    tamanhos_letras_ordenados = sorted(tamanhos_letras, key=chave_tamanho)
+    tamanhos_numericos_ordenados = sorted(tamanhos_numericos, key=lambda x: int(x))
 
-    pdf = PDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=11)
+    todos_tamanhos = tamanhos_letras_ordenados + tamanhos_numericos_ordenados
 
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_text_color(0)
-    pdf.set_draw_color(200, 200, 200)
+    # GRADE de faltas
+    pivot_faltas = df_faltas.pivot_table(
+        index='cor_pai', columns='tamanho', values='Estoque',
+        aggfunc=lambda x: '❌' if len(x) else '', fill_value=''
+    )
+    pivot_faltas = pivot_faltas.reindex(columns=todos_tamanhos, fill_value='')
 
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(95, 10, "Cor Pai", 1, 0, 'C', True)
-    pdf.cell(95, 10, "Tamanho", 1, 1, 'C', True)
+    grade_faltas = pivot_faltas.to_dict(orient='index')
 
-    pdf.set_font("Arial", '', 11)
-    for falta in faltas.to_dict(orient='records'):
-        pdf.cell(95, 8, falta['cor_pai'], 1, 0, 'C')
-        pdf.cell(95, 8, falta['tamanho'], 1, 1, 'C')
+    # Substituir ❌ por 'X' só no PDF para evitar erro de codificação latin1
+    for cor, tamanhos in grade_faltas.items():
+        for t in tamanhos:
+            if tamanhos[t] == '❌':
+                tamanhos[t] = 'X'
 
-    pdf_bytes = pdf.output(dest='S').encode('latin1')
-    buffer = BytesIO(pdf_bytes)
-    buffer.seek(0)
+    from utils.relatorios import gerar_pdf_faltas_grade
+    pdf_buffer = gerar_pdf_faltas_grade(grade_faltas, todos_tamanhos, codigo_loja_int, nome_grupo=filtro_sub_grupo)
 
     return send_file(
-        buffer,
+        pdf_buffer,
         as_attachment=True,
         download_name=f"relatorio_faltas_{codigo_loja}.pdf",
         mimetype='application/pdf'

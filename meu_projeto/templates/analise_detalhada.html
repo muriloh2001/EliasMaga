@@ -56,56 +56,67 @@
     </div>
 
     <!-- ✅ SOBRAS -->
-    <div class="mb-10">
-      <h3 class="text-2xl font-semibold mb-4 flex items-center text-gray-700">
-        <span class="mr-2">✅</span> Sobras (mais de 1 peça)
-      </h3>
-      <div class="overflow-x-auto rounded-lg shadow-md bg-white">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-100 text-sm font-medium text-gray-700">
-            <tr>
-              <th class="px-4 py-3 text-left">Cor Pai</th>
-              <th class="px-4 py-3 text-left">Tamanho</th>
-              <th class="px-4 py-3 text-left">Estoque</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            {% for row in sobras %}
-            <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2">{{ row.cor_pai }}</td>
-              <td class="px-4 py-2">{{ row.tamanho }}</td>
-              <td class="px-4 py-2">{{ row.Estoque }}</td>
-            </tr>
+    <!-- ✅ SOBRAS em Grade -->
+<div class="mb-10">
+  <h3 class="text-2xl font-semibold mb-4 flex items-center text-green-600">
+    <span class="mr-2">✅</span> Sobras (mais de 1 peça) - Grade Horizontal
+  </h3>
+  <div class="overflow-x-auto rounded-lg shadow-md bg-white">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-green-100 text-sm font-medium text-gray-700">
+        <tr>
+          <th class="px-4 py-3 text-left">Cor Pai</th>
+          {% for tamanho in todos_tamanhos %}
+            <th class="px-4 py-3 text-center">{{ tamanho }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 text-sm">
+        {% for cor_pai, tamanhos in grade_sobras.items() %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 font-medium">{{ cor_pai }}</td>
+            {% for tamanho in todos_tamanhos %}
+              <td class="px-4 py-2 text-center">
+                {{ tamanhos[tamanho] if tamanhos[tamanho] else 0 }}
+              </td>
             {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 
-    <!-- ❌ FALTAS -->
-    <div class="mb-10">
-      <h3 class="text-2xl font-semibold mb-4 flex items-center text-gray-700">
-        <span class="mr-2">❌</span> Faltas (estoque zerado)
-      </h3>
-      <div class="overflow-x-auto rounded-lg shadow-md bg-white">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-100 text-sm font-medium text-gray-700">
-            <tr>
-              <th class="px-4 py-3 text-left">Cor Pai</th>
-              <th class="px-4 py-3 text-left">Tamanho</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            {% for row in faltas %}
-            <tr class="hover:bg-gray-50">
-              <td class="px-4 py-2">{{ row.cor_pai }}</td>
-              <td class="px-4 py-2">{{ row.tamanho }}</td>
-            </tr>
+    <!-- ❌ FALTAS em Grade -->
+<div class="mb-10">
+  <h3 class="text-2xl font-semibold mb-4 flex items-center text-red-600">
+    <span class="mr-2">❌</span> Faltas (Estoque Zerado) - Grade Horizontal
+  </h3>
+  <div class="overflow-x-auto rounded-lg shadow-md bg-white">
+    <table class="min-w-full divide-y divide-gray-200">
+      <thead class="bg-red-100 text-sm font-medium text-gray-700">
+        <tr>
+          <th class="px-4 py-3 text-left">Cor Pai</th>
+          {% for tamanho in todos_tamanhos %}
+            <th class="px-4 py-3 text-center">{{ tamanho }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100 text-sm">
+        {% for cor_pai, tamanhos in grade_faltas.items() %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-2 font-medium">{{ cor_pai }}</td>
+            {% for tamanho in todos_tamanhos %}
+              <td class="px-4 py-2 text-center">
+                {{ tamanhos[tamanho] }}
+              </td>
             {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 
     <!-- 🔙 Voltar -->
     <div class="mt-6 text-center">
@@ -116,7 +127,7 @@
 </a>
 
       <!-- Botão para baixar PDF de Sobras -->
-      <a href="{{ url_for('download_pdf_sobras', codigo_loja=codigo_loja) }}?nome_sub_grupo={{ filtro_sub_grupo }}&nome_secao={{ filtro_secao }}&nome_produto={{ filtro_produto }}" class="inline-block">
+      <a href="{{ url_for('routes_bp.download_pdf_sobras', codigo_loja=codigo_loja) }}?nome_sub_grupo={{ filtro_sub_grupo }}&nome_secao={{ filtro_secao }}&nome_produto={{ filtro_produto }}" class="inline-block">
         <button type="button" 
                 class="bg-yellow-500 text-white px-6 py-3 rounded hover:bg-yellow-600 transition">
           📥 Baixar PDF das Sobras
@@ -125,7 +136,7 @@
 
 
       <!-- Botão para baixar PDF de Faltas -->
-      <form action="{{ url_for('download_pdf_faltas', codigo_loja=codigo_loja) }}" method="get" class="inline-block">
+      <form action="{{ url_for('routes_bp.download_pdf_faltas', codigo_loja=codigo_loja) }}" method="get" class="inline-block">
         <input type="hidden" name="nome_sub_grupo" value="{{ filtro_sub_grupo }}">
         <input type="hidden" name="nome_secao" value="{{ filtro_secao }}">
         <input type="hidden" name="nome_produto" value="{{ filtro_produto }}">

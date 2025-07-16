@@ -15,14 +15,19 @@ mapeamento_cores = carregar_mapeamento_csv()
 
 def classificar_cor_pai(cor):
     if pd.isna(cor):
-        return 'Desconhecido'
+        return 'OUTRAS'
+
     cor_lower = cor.lower().strip()
+    mapeamento_normalizado = {k.lower().strip(): v for k, v in mapeamento_cores.items()}
 
-    if cor_lower in [k.lower().strip() for k in mapeamento_cores]:
-        return mapeamento_cores.get(cor_lower, 'Outras')
+    # Primeiro tenta pelo mapeamento manual
+    if cor_lower in mapeamento_normalizado:
+        return mapeamento_normalizado[cor_lower]
 
+    # Depois tenta pelo mapeamento automático
     for palavra, cor_pai in MAPEAMENTO_AUTOMATICO.items():
         if palavra in cor_lower:
             return cor_pai
 
-    return 'Outras'
+    return 'OUTRAS'
+
