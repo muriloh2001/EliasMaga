@@ -1,167 +1,169 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upload de Arquivo</title>
-    <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            background-color: #f4f6f9;
-            margin: 0;
-            padding: 40px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-        }
-
-        h1 {
-            color: #333;
-            font-size: 2rem;
-            margin-bottom: 20px;
-        }
-
-        .flash-messages {
-            margin-bottom: 20px;
-            padding: 10px;
-            border-radius: 5px;
-            width: 100%;
-            max-width: 500px;
-            animation: fadeIn 0.5s ease;
-        }
-
-        .flash-messages li {
-            list-style: none;
-            margin-bottom: 5px;
-            padding: 8px;
-            border-radius: 4px;
-        }
-
-        .flash-messages li.error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-
-        .flash-messages li.success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-
-        form {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 500px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            text-align: center;
-        }
-
-        input[type="file"] {
-            border: 1px solid #ccc;
-            padding: 12px;
-            border-radius: 4px;
-            font-size: 16px;
-            background-color: #f9f9f9;
-        }
-
-        button {
-            padding: 12px;
-            background-color: #0066cc;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        button:hover {
-            background-color: #0055aa;
-        }
-
-        .link-button {
-            margin-top: 20px;
-        }
-
-        .link-button a {
-            text-decoration: none;
-        }
-
-        /* Loading Spinner */
-        .loading {
-            display: none;
-            margin-top: 20px;
-        }
-
-        .loading.show {
-            display: block;
-            text-align: center;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sistema de Upload</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+    rel="stylesheet"
+  />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            inter: ["Inter", "sans-serif"],
+          },
+        },
+      },
+    };
+  </script>
 </head>
-<body>
-    <h1>Upload de Arquivo</h1>
-    <form method="POST" enctype="multipart/form-data" id="uploadForm">
-        <input type="file" name="file" required>
-        <button type="submit" id="submitButton">Enviar</button>
+<body class="bg-gray-100 font-inter min-h-screen flex flex-col items-center px-4 py-6">
+
+  <!-- Cabeçalho com Data, Hora e Saudação -->
+  <div class="w-full max-w-4xl mb-6 flex justify-between items-center">
+    <div>
+      <h2 class="text-lg text-gray-700 font-semibold" id="greeting">👋 Bem-vindo!</h2>
+      <p class="text-sm text-gray-500" id="datetime">Carregando data...</p>
+    </div>
+    
+  </div>
+
+  <!-- Caixa Central -->
+  <div class="w-full max-w-md bg-white p-6 rounded-xl shadow-md">
+    <h1 class="text-2xl font-semibold text-gray-800 mb-6 text-center">
+      📁 Upload de Arquivo
+    </h1>
+
+    <!-- Flash messages (funciona somente se processado pelo Flask) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="space-y-3 mb-4">
+          {% for category, message in messages %}
+            <li
+              class="p-3 rounded-lg text-sm font-medium
+              {% if category == 'success' %} bg-green-100 text-green-800
+              {% elif category == 'error' %} bg-red-100 text-red-800
+              {% else %} bg-yellow-100 text-yellow-800 {% endif %}"
+            >
+              {{ message }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Upload Form -->
+    <form method="POST" enctype="multipart/form-data" id="uploadForm" class="space-y-4">
+      <input
+        type="file"
+        name="file"
+        required
+        class="w-full px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      
+      <button
+        type="submit"
+        id="submitButton"
+        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md transition"
+      >
+        📤 Enviar Arquivo
+      </button>
     </form>
 
-    <div class="loading" id="loadingSpinner">
-        <img src="https://i.gifer.com/4V0V.gif" alt="Carregando..." width="50">
-        <p>Carregando...</p>
+    <!-- Loading Spinner -->
+    <div class="hidden text-center mt-4" id="loadingSpinner">
+      <div class="flex items-center justify-center space-x-2">
+        <svg
+          class="w-5 h-5 text-blue-600 animate-spin"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="4"
+          ></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <p class="text-sm text-gray-600">Enviando arquivo...</p>
+      </div>
     </div>
 
-    <div class="link-button">
-    <a href="{{ url_for('routes_bp.analise') }}">
-        <button>Ir para Análise</button>
-    </a>
-</div>
+    <!-- Botão para análise -->
+    <div class="mt-6 text-center">
+      <a
+        href="{{ url_for('routes_bp.analise') }}"
+        class="inline-block bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-md transition"
+        >📊 Ir para Análise</a
+      >
+    </div>
 
-<div class="link-button">
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
+    <!-- Botão para classificar cores, se necessário -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
         {% if 'cores ainda não classificadas' in message %}
-            <a href="{{ url_for('routes_bp.classificar_cores') }}">
-                <button style="background-color: orange;">Classificar Cores</button>
-            </a>
+          <div class="mt-4 text-center">
+            <a
+              href="{{ url_for('routes_bp.classificar_cores') }}"
+              class="inline-block bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded-md transition"
+              >🎨 Classificar Cores</a
+            >
+          </div>
         {% endif %}
-    {% endfor %}
-{% endwith %}
-</div>
+      {% endfor %}
+    {% endwith %}
+  </div>
 
+  <!-- Rodapé simples -->
+  <footer class="text-xs text-gray-500 mt-8">
+    Desenvolvido por <strong>Elias Magazine</strong> • Sistema Interno • &copy; {{ agora.year }}
+  </footer>
 
+  <!-- Scripts -->
+  <script>
+    const uploadForm = document.getElementById('uploadForm');
+    const submitButton = document.getElementById('submitButton');
+    const loadingSpinner = document.getElementById('loadingSpinner');
 
-    <script>
-        // Mostra o indicador de carregamento e altera o texto do botão
-        const uploadForm = document.getElementById('uploadForm');
-        const submitButton = document.getElementById('submitButton');
-        const loadingSpinner = document.getElementById('loadingSpinner');
-        
-        uploadForm.addEventListener('submit', function(event) {
-            event.preventDefault();
-            submitButton.disabled = true; // Desabilita o botão de envio
-            submitButton.innerHTML = 'Enviando...';
-            loadingSpinner.classList.add('show'); // Exibe o indicador de carregamento
-            
-            // Submete o formulário
-            this.submit();
-        });
-    </script>
+    uploadForm.addEventListener('submit', function (event) {
+      // Remova o preventDefault para permitir o envio normal
+      // event.preventDefault();
+
+      // Desabilita botão e mostra spinner ao enviar
+      submitButton.disabled = true;
+      submitButton.textContent = '⏳ Enviando...';
+      loadingSpinner.classList.remove('hidden');
+      // O form continuará sendo enviado normalmente
+    });
+
+    // Atualiza saudação + data/hora
+    function updateDateTime() {
+      const now = new Date();
+      const options = { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' };
+      const dateStr = now.toLocaleDateString('pt-BR', options);
+      const timeStr = now.toLocaleTimeString('pt-BR');
+
+      document.getElementById('datetime').textContent = `${dateStr} - ${timeStr}`;
+
+      const hour = now.getHours();
+      let greeting = 'Olá!';
+      if (hour < 12) greeting = '🌅 Bom dia!';
+      else if (hour < 18) greeting = '🌇 Boa tarde!';
+      else greeting = '🌙 Boa noite!';
+      document.getElementById('greeting').textContent = greeting;
+    }
+
+    setInterval(updateDateTime, 1000);
+    updateDateTime();
+  </script>
+
 </body>
 </html>

@@ -11,6 +11,7 @@ from utils.filtros import get_df_filtrado
 from utils.estoque import calcular_sobras_por_loja
 from utils.relatorios import gerar_pdf_sobras_grade, gerar_pdf_faltas_grade
 from utils.grade_ideal import obter_grade_ideal
+from datetime import datetime
 
 routes_bp = Blueprint('routes_bp', __name__)
 
@@ -21,6 +22,7 @@ mapeamento_cores = {}
 @routes_bp.route('/', methods=['GET', 'POST'])
 def index():
     global df_global
+    agora = datetime.now()  # ✅ Definido no início
 
     if request.method == 'POST' and 'file' in request.files:
         arquivo = request.files['file']
@@ -48,7 +50,6 @@ def index():
             df_global['tamanho'] = df_global['tamanho'].astype(str).str.upper().str.strip()
             df_global['tamanho_num'] = pd.to_numeric(df_global['tamanho'], errors='coerce')
 
-            # Verifica se há cores novas
             cores_planilha = df_global['cor_1'].dropna().unique()
             cores_mapeadas = [k.lower().strip() for k in mapeamento_cores.keys()]
             cores_novas = [c for c in cores_planilha if c.lower().strip() not in cores_mapeadas]
@@ -57,12 +58,9 @@ def index():
                 flash(f"Atenção! Existem {len(cores_novas)} cores ainda não classificadas. Você pode classificá-las agora ou continuar.", "warning")
 
             flash("Arquivo carregado com sucesso!", "success")
-            return redirect(url_for('routes_bp.analise'))  # Sempre segue para análise
+            return redirect(url_for('routes_bp.analise'))
 
-    return render_template('index.html')
-
-
-
+    return render_template('index.html', agora=agora)
 
 @routes_bp.route('/classificar_cores', methods=['GET'])
 def classificar_cores():
