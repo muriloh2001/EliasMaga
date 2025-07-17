@@ -10,7 +10,7 @@ from utils.classificacao import classificar_cor_pai, salvar_mapeamento_csv
 from utils.filtros import get_df_filtrado
 from utils.estoque import calcular_sobras_por_loja
 from utils.relatorios import gerar_pdf_sobras_grade, gerar_pdf_faltas_grade
-
+from utils.grade_ideal import obter_grade_ideal
 
 routes_bp = Blueprint('routes_bp', __name__)
 
@@ -245,7 +245,7 @@ def analise():
         df_completo=df_completo_html
     )
 
-@routes_bp.route('/analise_detalhada/<codigo_loja>') 
+@routes_bp.route('/analise_detalhada/<codigo_loja>')
 def analise_detalhada(codigo_loja):
     global df_global
 
@@ -278,11 +278,13 @@ def analise_detalhada(codigo_loja):
     if df_loja.empty:
         return f"Nenhum dado encontrado para a loja {codigo_loja} com os filtros aplicados."
 
-    df_filtrado['cor_pai'] = df_filtrado['cor_1'].apply(classificar_cor_pai)
+    # Normaliza colunas
+    df_filtrado['cor_pai'] = df_filtrado['cor_1'].apply(classificar_cor_pai).str.strip().str.upper()
     df_filtrado['tamanho'] = df_filtrado['tamanho'].astype(str).str.strip().str.upper()
     df_loja['cor_pai'] = df_loja['cor_1'].apply(classificar_cor_pai).str.strip().str.upper()
     df_loja['tamanho'] = df_loja['tamanho'].astype(str).str.strip().str.upper()
 
+    # Estoque da loja
     agrupado_loja = df_loja.groupby(['cor_pai', 'tamanho'])['Estoque'].sum().reset_index()
 
     tamanhos_unicos = sorted(df_filtrado['tamanho'].unique())
@@ -290,20 +292,13 @@ def analise_detalhada(codigo_loja):
     combinacoes_todas = [(cor, tam) for cor in cores_unicas for tam in tamanhos_unicos]
 
     df_completo = pd.DataFrame(combinacoes_todas, columns=['cor_pai', 'tamanho'])
-    df_completo['cor_pai'] = df_completo['cor_pai'].str.strip().str.upper()
-    df_completo['tamanho'] = df_completo['tamanho'].astype(str).str.strip().str.upper()
     agrupado_loja['cor_pai'] = agrupado_loja['cor_pai'].str.strip().str.upper()
     agrupado_loja['tamanho'] = agrupado_loja['tamanho'].astype(str).str.strip().str.upper()
-
     df_completo = df_completo.merge(agrupado_loja, on=['cor_pai', 'tamanho'], how='left')
     df_completo['Estoque'] = df_completo['Estoque'].fillna(0).astype(int)
     df_completo['Estoque'] = df_completo['Estoque'].apply(lambda x: max(0, x))
 
-    df_completo_pivot = df_completo.pivot_table(index='cor_pai', columns='tamanho', values='Estoque', aggfunc='sum', fill_value=0)
-
-    sobras = df_completo[df_completo['Estoque'] > 1].to_dict(orient='records')
-    faltas = df_completo[df_completo['Estoque'] == 0].to_dict(orient='records')
-
+    # 🔢 Ordenação dos tamanhos
     ordem_tamanhos_personalizada = ['PP', 'P', 'M', 'G', 'GG', 'XGG', 'G1', 'G2', 'G3', 'G4']
     tamanhos_unicos = df_completo['tamanho'].unique().tolist()
     tamanhos_letras = [t for t in tamanhos_unicos if not t.isdigit()]
@@ -313,31 +308,47 @@ def analise_detalhada(codigo_loja):
         try:
             return ordem_tamanhos_personalizada.index(x)
         except ValueError:
-            return len(ordem_tamanhos_personalizada) + ord(x[0]) if x else 9999
+            return len(ordem_tamanhos_personalizada) + int(x) if x.isdigit() else 9999
 
     tamanhos_letras_ordenados = sorted(tamanhos_letras, key=chave_tamanho)
     tamanhos_numericos_ordenados = sorted(tamanhos_numericos, key=lambda x: int(x))
-
     todos_tamanhos = tamanhos_letras_ordenados + tamanhos_numericos_ordenados
-    grade = df_completo_pivot.to_dict(orient='index')
-    
-        # Grade de sobras e faltas pivotadas
-    pivot_sobras = df_completo[df_completo['Estoque'] > 1].pivot_table(
-        index='cor_pai', columns='tamanho', values='Estoque', aggfunc='sum', fill_value=0)
 
-    pivot_faltas = df_completo[df_completo['Estoque'] == 0].pivot_table(
-        index='cor_pai', columns='tamanho', values='Estoque',
+    # 🧠 Grade ideal
+    df_completo['qtd_ideal'] = df_completo.apply(
+        lambda row: obter_grade_ideal(row['cor_pai'], row['tamanho'], filtro_sub_grupo),
+        axis=1
+    )
+
+    df_completo['diferenca'] = df_completo['Estoque'] - df_completo['qtd_ideal']
+
+    # 🔄 Pivot para tabelas
+    df_completo_pivot = df_completo.pivot_table(
+        index='cor_pai', columns='tamanho', values='Estoque', aggfunc='sum', fill_value=0
+    ).reindex(columns=todos_tamanhos, fill_value=0)
+
+    pivot_ideal = df_completo.pivot_table(
+        index='cor_pai', columns='tamanho', values='qtd_ideal', aggfunc='sum', fill_value=0
+    ).reindex(columns=todos_tamanhos, fill_value=0)
+
+    pivot_sobras = df_completo[df_completo['diferenca'] > 0].pivot_table(
+        index='cor_pai', columns='tamanho', values='diferenca', aggfunc='sum', fill_value=0
+    ).reindex(columns=todos_tamanhos, fill_value=0)
+
+    pivot_faltas = df_completo[df_completo['diferenca'] < 0].pivot_table(
+        index='cor_pai', columns='tamanho', values='diferenca',
         aggfunc=lambda x: 'X' if len(x) else '', fill_value=''
-)
-    # Organiza ordem das colunas
-    pivot_sobras = pivot_sobras.reindex(columns=todos_tamanhos, fill_value=0)
-    pivot_faltas = pivot_faltas.reindex(columns=todos_tamanhos, fill_value='')
+    ).reindex(columns=todos_tamanhos, fill_value='')
 
-    # Converte para dicionários para o template
+    # 🎯 Dicionários para o template
+    grade = df_completo_pivot.to_dict(orient='index')
+    grade_ideal = pivot_ideal.to_dict(orient='index')
     grade_sobras = pivot_sobras.to_dict(orient='index')
     grade_faltas = pivot_faltas.to_dict(orient='index')
 
-
+    # Listas auxiliares simples
+    sobras = df_completo[df_completo['diferenca'] > 0].to_dict(orient='records')
+    faltas = df_completo[df_completo['diferenca'] < 0].to_dict(orient='records')
 
     return render_template(
         'analise_detalhada.html',
@@ -346,13 +357,14 @@ def analise_detalhada(codigo_loja):
         filtro_secao=filtro_secao,
         filtro_produto=filtro_produto,
         grade=grade,
-        sobras=sobras,
-        faltas=faltas,
-        todos_tamanhos=todos_tamanhos,
+        grade_ideal=grade_ideal,
         grade_sobras=grade_sobras,
-        grade_faltas=grade_faltas
-
+        grade_faltas=grade_faltas,
+        todos_tamanhos=todos_tamanhos,
+        sobras=sobras,
+        faltas=faltas
     )
+
 
 # Ajuste para o código que gera as sobras
 @routes_bp.route('/download_pdf_sobras/<codigo_loja>', methods=['GET'])

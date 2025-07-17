@@ -118,6 +118,36 @@
   </div>
 </div>
 
+<!-- 🎯 GRADE IDEAL -->
+<div class="mb-10">
+  <h3 class="text-xl font-semibold mb-2">🎯 Grade Ideal</h3>
+  <div class="overflow-x-auto rounded shadow">
+    <table class="min-w-full divide-y divide-gray-200 bg-white">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-2 text-left text-sm font-medium text-gray-700">Cor Pai</th>
+          {% for tamanho in todos_tamanhos %}
+          <th class="px-4 py-2 text-center text-sm font-medium text-gray-700">{{ tamanho }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for cor, linha in grade_ideal.items() %}
+        <tr>
+          <td class="px-4 py-2 font-semibold">{{ cor }}</td>
+          {% for tamanho in todos_tamanhos %}
+          <td class="px-4 py-2 text-center">
+            {{ linha[tamanho] if tamanho in linha else '' }}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
     <!-- 🔙 Voltar -->
     <div class="mt-6 text-center">
       <a href="{{ url_for('routes_bp.analise') }}?nome_sub_grupo={{ filtro_sub_grupo }}&nome_secao={{ filtro_secao }}&nome_produto={{ filtro_produto }}"
