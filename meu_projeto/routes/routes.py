@@ -1,10 +1,10 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, send_file
 from io import BytesIO
+from flask import current_app
 import os
 import pandas as pd
 from fpdf import FPDF
 
-from app import app, df_global, mapeamento_cores
 from config import COLUNAS_RELEVANTES, TIPOS_COLUNAS
 from utils.classificacao import classificar_cor_pai, salvar_mapeamento_csv
 from utils.filtros import get_df_filtrado
@@ -14,6 +14,10 @@ from utils.grade_ideal import obter_grade_ideal
 
 routes_bp = Blueprint('routes_bp', __name__)
 
+# Variáveis globais
+df_global = None
+mapeamento_cores = {}
+
 @routes_bp.route('/', methods=['GET', 'POST'])
 def index():
     global df_global
@@ -21,7 +25,7 @@ def index():
     if request.method == 'POST' and 'file' in request.files:
         arquivo = request.files['file']
         if arquivo:
-            caminho = os.path.join(app.config['UPLOAD_FOLDER'], arquivo.filename)
+            caminho = os.path.join(current_app.config['UPLOAD_FOLDER'], arquivo.filename)
             arquivo.save(caminho)
 
             if arquivo.filename.endswith('.csv'):
@@ -284,7 +288,6 @@ def analise_detalhada(codigo_loja):
     df_loja['cor_pai'] = df_loja['cor_1'].apply(classificar_cor_pai).str.strip().str.upper()
     df_loja['tamanho'] = df_loja['tamanho'].astype(str).str.strip().str.upper()
 
-    # Estoque da loja
     agrupado_loja = df_loja.groupby(['cor_pai', 'tamanho'])['Estoque'].sum().reset_index()
 
     tamanhos_unicos = sorted(df_filtrado['tamanho'].unique())
@@ -320,9 +323,20 @@ def analise_detalhada(codigo_loja):
         axis=1
     )
 
-    df_completo['diferenca'] = df_completo['Estoque'] - df_completo['qtd_ideal']
+    # Lógica de diferença condicional por subgrupo
+    grupos_grade_ideal = [
+        'CAMISA SOCIAL M/L P1 R$59,99 A R$99,99',
+        'CAMISA SOCIAL M/L P2 R$109,99 A R$159,99',
+        'CAMISA SOCIAL M/L P3 R$169,99 A R$199,99',
+        'CAMISA SOCIAL M/L P4 R$200,00 +'
+    ]
 
-    # 🔄 Pivot para tabelas
+    if filtro_sub_grupo in grupos_grade_ideal:
+        df_completo['diferenca'] = df_completo['Estoque'] - df_completo['qtd_ideal']
+    else:
+        df_completo['diferenca'] = df_completo['Estoque'].apply(lambda x: -1 if x == 0 else (x - 1 if x > 1 else 0))
+
+        # 🔄 Pivot para tabelas
     df_completo_pivot = df_completo.pivot_table(
         index='cor_pai', columns='tamanho', values='Estoque', aggfunc='sum', fill_value=0
     ).reindex(columns=todos_tamanhos, fill_value=0)
@@ -335,10 +349,22 @@ def analise_detalhada(codigo_loja):
         index='cor_pai', columns='tamanho', values='diferenca', aggfunc='sum', fill_value=0
     ).reindex(columns=todos_tamanhos, fill_value=0)
 
-    pivot_faltas = df_completo[df_completo['diferenca'] < 0].pivot_table(
-        index='cor_pai', columns='tamanho', values='diferenca',
-        aggfunc=lambda x: 'X' if len(x) else '', fill_value=''
-    ).reindex(columns=todos_tamanhos, fill_value='')
+    # 📌 Faltas: lógica diferente para os grupos com grade ideal
+    if filtro_sub_grupo in grupos_grade_ideal:
+        # Faltas com 'X' proporcional à quantidade faltante
+        def gerar_xs(valor):
+            return 'X' * abs(int(valor)) if valor < 0 else ''
+        
+        pivot_faltas = df_completo[df_completo['diferenca'] < 0].pivot_table(
+            index='cor_pai', columns='tamanho', values='diferenca',
+            aggfunc=lambda x: gerar_xs(x.sum()), fill_value=''
+        ).reindex(columns=todos_tamanhos, fill_value='')
+    else:
+        # Faltas simples (estoque == 0)
+        pivot_faltas = df_completo[df_completo['diferenca'] < 0].pivot_table(
+            index='cor_pai', columns='tamanho', values='diferenca',
+            aggfunc=lambda x: 'X' if len(x) else '', fill_value=''
+        ).reindex(columns=todos_tamanhos, fill_value='')
 
     # 🎯 Dicionários para o template
     grade = df_completo_pivot.to_dict(orient='index')
@@ -346,7 +372,6 @@ def analise_detalhada(codigo_loja):
     grade_sobras = pivot_sobras.to_dict(orient='index')
     grade_faltas = pivot_faltas.to_dict(orient='index')
 
-    # Listas auxiliares simples
     sobras = df_completo[df_completo['diferenca'] > 0].to_dict(orient='records')
     faltas = df_completo[df_completo['diferenca'] < 0].to_dict(orient='records')
 
@@ -364,6 +389,7 @@ def analise_detalhada(codigo_loja):
         sobras=sobras,
         faltas=faltas
     )
+
 
 
 # Ajuste para o código que gera as sobras
@@ -445,8 +471,6 @@ def download_pdf_sobras(codigo_loja):
         download_name=f"relatorio_sobras_{codigo_loja}.pdf",
         mimetype='application/pdf'
     )
-
-
     
 @routes_bp.route('/download_pdf_faltas/<codigo_loja>', methods=['GET'])
 def download_pdf_faltas(codigo_loja):
@@ -491,7 +515,8 @@ def download_pdf_faltas(codigo_loja):
     df_completo = df_completo.merge(agrupado_loja, on=['cor_pai', 'tamanho'], how='left')
     df_completo['Estoque'] = df_completo['Estoque'].fillna(0).astype(int)
 
-    df_faltas = df_completo[df_completo['Estoque'] == 0]
+    df_completo['cor_pai'] = df_completo['cor_pai'].astype(str).str.strip().str.upper()
+    df_completo['tamanho'] = df_completo['tamanho'].astype(str).str.strip().str.upper()
 
     # Ordenar tamanhos personalizados
     ordem_tamanhos_personalizada = ['PP', 'P', 'M', 'G', 'GG', 'XGG', 'G1', 'G2', 'G3', 'G4']
@@ -506,26 +531,68 @@ def download_pdf_faltas(codigo_loja):
 
     tamanhos_letras_ordenados = sorted(tamanhos_letras, key=chave_tamanho)
     tamanhos_numericos_ordenados = sorted(tamanhos_numericos, key=lambda x: int(x))
-
     todos_tamanhos = tamanhos_letras_ordenados + tamanhos_numericos_ordenados
 
-    # GRADE de faltas
-    pivot_faltas = df_faltas.pivot_table(
-        index='cor_pai', columns='tamanho', values='Estoque',
-        aggfunc=lambda x: '❌' if len(x) else '', fill_value=''
-    )
-    pivot_faltas = pivot_faltas.reindex(columns=todos_tamanhos, fill_value='')
+    # Grupos com grade ideal definida
+    grupos_grade_ideal = [
+        'CAMISA SOCIAL M/L P1 R$59,99 A R$99,99',
+        'CAMISA SOCIAL M/L P2 R$109,99 A R$159,99',
+        'CAMISA SOCIAL M/L P3 R$169,99 A R$199,99',
+        'CAMISA SOCIAL M/L P4 R$200,00 +'
+    ]
+
+    from utils.grade_ideal import obter_grade_ideal
+
+    if filtro_sub_grupo in grupos_grade_ideal:
+        # Agrupa primeiro para evitar duplicações
+        df_completo = df_completo.groupby(['cor_pai', 'tamanho'], as_index=False).agg({
+            'Estoque': 'sum'
+        })
+        
+        # Corrigir estoque negativo (proteção extra)
+        df_completo['Estoque'] = df_completo['Estoque'].apply(lambda x: max(0, x))
+
+
+        # Aplica grade ideal depois de agrupar
+        df_completo['qtd_ideal'] = df_completo.apply(
+            lambda row: obter_grade_ideal(row['cor_pai'], row['tamanho'], filtro_sub_grupo),
+            axis=1
+        )
+
+        df_completo['diferenca'] = df_completo['Estoque'] - df_completo['qtd_ideal']
+
+        # DEBUG TEMPORÁRIO: Verificar se roxo está vindo com -2
+        debug_roxo = df_completo[
+            (df_completo['cor_pai'] == 'ROXO') & (df_completo['tamanho'] == '1')
+        ]
+        print("DEBUG ROXO TAMANHO 1:")
+        print(debug_roxo)
+
+        def gerar_xs_pdf(valor):
+            return 'X' * abs(int(valor)) if valor < 0 else ''
+
+        pivot_faltas = df_completo[df_completo['diferenca'] < 0].pivot_table(
+            index='cor_pai', columns='tamanho', values='diferenca',
+            aggfunc=lambda x: gerar_xs_pdf(x.sum()), fill_value=''
+        ).reindex(columns=todos_tamanhos, fill_value='')
+
+    else:
+        df_faltas = df_completo[df_completo['Estoque'] == 0]
+
+        pivot_faltas = df_faltas.pivot_table(
+            index='cor_pai', columns='tamanho', values='Estoque',
+            aggfunc=lambda x: 'X' if len(x) else '', fill_value=''
+        ).reindex(columns=todos_tamanhos, fill_value='')
 
     grade_faltas = pivot_faltas.to_dict(orient='index')
 
-    # Substituir ❌ por 'X' só no PDF para evitar erro de codificação latin1
-    for cor, tamanhos in grade_faltas.items():
-        for t in tamanhos:
-            if tamanhos[t] == '❌':
-                tamanhos[t] = 'X'
-
     from utils.relatorios import gerar_pdf_faltas_grade
-    pdf_buffer = gerar_pdf_faltas_grade(grade_faltas, todos_tamanhos, codigo_loja_int, nome_grupo=filtro_sub_grupo)
+    pdf_buffer = gerar_pdf_faltas_grade(
+        grade_faltas,
+        todos_tamanhos,
+        codigo_loja_int,
+        nome_grupo=filtro_sub_grupo
+    )
 
     return send_file(
         pdf_buffer,

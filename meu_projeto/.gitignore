@@ -1,0 +1,63 @@
+# Sistema operacional
+##################
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+
+# Linux
+*~
+
+# Python
+##################
+# Compiled bytecode
+*.pyc
+*.pyo
+__pycache__/
+
+# Ambiente Virtual
+venv/
+ENV/
+env/
+.venv/
+
+# Arquivos de configuração de IDE
+##################
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Arquivos de dependência
+##################
+# Dependências
+*.egg-info/
+dist/
+build/
+*.log
+
+# Arquivos temporários
+##################
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# Arquivos do Flask
+##################
+instance/
+*.db
+
+# Arquivos do dotenv
+##################
+.env
+
+# Outros arquivos ignorados
+##################
+*.sqlite
