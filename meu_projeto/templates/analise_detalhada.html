@@ -148,6 +148,48 @@
 </div>
 
 
+<!-- 📊 Comparativo com Grade Ideal + Gráfico -->
+{% if comparativo_percentual and comparativo_percentual.percentual is not none %}
+  <div class="bg-white shadow p-4 rounded-md border border-gray-200 mb-10">
+    <h3 class="text-md font-semibold text-gray-800 mb-3">📊 Comparativo com Grade Ideal</h3>
+
+    <ul class="text-sm text-gray-700 space-y-1 mb-3">
+      <li>🧮 <strong>Estoque atual:</strong> {{ comparativo_percentual.total_estoque }} unidades</li>
+      <li>🎯 <strong>Estoque ideal:</strong> {{ comparativo_percentual.total_ideal }} unidades</li>
+      <li>
+        📈 <strong>Diferença percentual:</strong> 
+        <span class="{% if comparativo_percentual.percentual > 0 %}text-yellow-600{% elif comparativo_percentual.percentual < 0 %}text-red-600{% else %}text-green-600{% endif %}">
+          {{ comparativo_percentual.percentual }}%
+        </span>
+      </li>
+    </ul>
+
+    <!-- Alerta interpretativo -->
+    {% if comparativo_percentual.percentual > 0 %}
+      <div class="text-yellow-700 bg-yellow-100 border border-yellow-300 rounded px-4 py-2 text-sm flex items-center">
+        ⚠️ Estoque acima do ideal em {{ comparativo_percentual.percentual }}%. Avaliar redistribuição ou redução.
+      </div>
+    {% elif comparativo_percentual.percentual < 0 %}
+      <div class="text-red-700 bg-red-100 border border-red-300 rounded px-4 py-2 text-sm flex items-center">
+        ❌ Estoque abaixo do ideal em {{ comparativo_percentual.percentual | abs }}%. Avaliar reposição urgente.
+      </div>
+    {% else %}
+      <div class="text-green-700 bg-green-100 border border-green-300 rounded px-4 py-2 text-sm flex items-center">
+        ✅ Estoque exato conforme grade ideal!
+      </div>
+    {% endif %}
+
+    <!-- Gráfico horizontal -->
+<!-- Gráfico horizontal -->
+  <div class="mt-6 max-w-md mx-auto"> <!-- max-w-md limita a largura (aprox 28rem) e mx-auto centraliza -->
+    <h4 class="text-sm font-semibold text-gray-700 mb-2">📊 Estoque Atual vs Ideal</h4>
+    <canvas id="estoqueChart" height="60"></canvas> <!-- altura reduzida -->
+  </div>
+
+{% endif %}
+
+
+
     <!-- 🔙 Voltar -->
     <div class="mt-6 text-center">
       <a href="{{ url_for('routes_bp.analise') }}?nome_sub_grupo={{ filtro_sub_grupo }}&nome_secao={{ filtro_secao }}&nome_produto={{ filtro_produto }}"
@@ -179,6 +221,53 @@
 
     </div>
   </div>
+
+  {% if comparativo_percentual and comparativo_percentual.percentual is not none %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const ideal = {{ comparativo_percentual.total_ideal }};
+  const atual = {{ comparativo_percentual.total_estoque }};
+
+  const ctx = document.getElementById('estoqueChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Ideal', 'Atual'],
+      datasets: [{
+        label: 'Unidades',
+        data: [ideal, atual],
+        backgroundColor: [
+          'rgba(59, 130, 246, 0.6)', // azul para ideal
+          atual > ideal ? 'rgba(234, 179, 8, 0.6)' : 'rgba(239, 68, 68, 0.6)' // amarelo ou vermelho
+        ],
+        borderColor: [
+          'rgba(59, 130, 246, 1)',
+          atual > ideal ? 'rgba(202, 138, 4, 1)' : 'rgba(220, 38, 38, 1)'
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      scales: {
+        x: {
+          beginAtZero: true
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: context => `${context.parsed.x} unidades`
+          }
+        }
+      }
+    }
+  });
+</script>
+{% endif %}
+
 
 </body>
 </html>

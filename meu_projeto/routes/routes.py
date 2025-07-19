@@ -8,10 +8,12 @@ from fpdf import FPDF
 from config import COLUNAS_RELEVANTES, TIPOS_COLUNAS
 from utils.classificacao import classificar_cor_pai, salvar_mapeamento_csv
 from utils.filtros import get_df_filtrado
-from utils.estoque import calcular_sobras_por_loja
+from utils.estoque import calcular_sobras_por_loja, debug_diferencas_estoque_vs_grade
 from utils.relatorios import gerar_pdf_sobras_grade, gerar_pdf_faltas_grade
 from utils.grade_ideal import obter_grade_ideal
 from datetime import datetime
+from utils.estoque import calcular_percentual_grade_ideal
+import signal
 
 routes_bp = Blueprint('routes_bp', __name__)
 
@@ -19,6 +21,27 @@ routes_bp = Blueprint('routes_bp', __name__)
 df_global = None
 mapeamento_cores = {}
 
+@routes_bp.route('/finalizado')
+def finalizado():
+    return render_template('finalizado.html')
+
+
+def shutdown_server():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Servidor não está rodando no Werkzeug')
+    func()
+
+@routes_bp.route('/shutdown', methods=['POST'])
+def shutdown():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        return "Erro: servidor não pode ser finalizado", 500
+    func()
+    print("🛑 Servidor está sendo finalizado...")
+    return "🛑 Aplicação encerrada com sucesso!"
+
+    
 @routes_bp.route('/', methods=['GET', 'POST'])
 def index():
     global df_global
@@ -98,7 +121,7 @@ def atualizar_cores():
     # Reclassifica com novos dados
     df_global['cor_pai'] = df_global['cor_1'].apply(classificar_cor_pai)
 
-    return redirect(url_for('index'))
+    return redirect(url_for('routes_bp.index'))
 
 @routes_bp.route('/analise', methods=['GET', 'POST'])
 def analise():
@@ -118,7 +141,16 @@ def analise():
     filtro_produto = request.form.get('nome_produto') or request.args.get('nome_produto', '')
 
     df_filtrado = get_df_filtrado(df_global, filtro_sub_grupo, filtro_secao, filtro_produto)
-    
+
+    # 🔧 Padronização
+    df_filtrado['cor_pai'] = df_filtrado['cor_1'].apply(classificar_cor_pai).str.strip().str.upper()
+    df_filtrado['tamanho'] = df_filtrado['tamanho'].astype(str).str.strip().str.upper()
+    df_filtrado['Estoque'] = pd.to_numeric(df_filtrado['Estoque'], errors='coerce').fillna(0).astype(int)
+
+    # 🔍 Debug: total por loja 1
+    total_loja1 = df_filtrado[df_filtrado['codigo_loja'] == 1]['Estoque'].sum()
+    print(f"🔍 Estoque total da Loja 1 (análise): {total_loja1}")
+
     if not df_filtrado.empty:
         total_por_loja = df_filtrado.groupby('codigo_loja')['Estoque'].sum().reset_index()
         tem_dados = True
@@ -149,23 +181,23 @@ def analise():
 
         for cor in todas_cores:
             for tam in todos_tamanhos:
-                sobras_deposito = df_completo[(
-                    df_completo['cor_pai'] == cor) &
+                sobras_deposito = df_completo[
+                    (df_completo['cor_pai'] == cor) &
                     (df_completo['tamanho'] == tam) &
                     (df_completo['status'] == 'sobra') &
                     (df_completo['codigo_loja'] == 99)
                 ]
 
-                sobras_lojas = df_completo[(
-                    df_completo['cor_pai'] == cor) &
+                sobras_lojas = df_completo[
+                    (df_completo['cor_pai'] == cor) &
                     (df_completo['tamanho'] == tam) &
                     (df_completo['status'] == 'sobra') &
                     (df_completo['codigo_loja'] != 99) &
                     (df_completo['codigo_loja'] != 98)
                 ]
 
-                faltas = df_completo[(
-                    df_completo['cor_pai'] == cor) &
+                faltas = df_completo[
+                    (df_completo['cor_pai'] == cor) &
                     (df_completo['tamanho'] == tam) &
                     (df_completo['status'] == 'falta') &
                     (df_completo['codigo_loja'] != 98)
@@ -227,9 +259,7 @@ def analise():
     else:
         df_completo_html = None
 
-    # AQUI: total correto ANTES da paginação
     total_recomendacoes = len(recomendacoes)
-
     recomendacoes_paginadas = recomendacoes[:20]
 
     return render_template(
@@ -246,6 +276,7 @@ def analise():
         total_recomendacoes=total_recomendacoes,
         df_completo=df_completo_html
     )
+
 
 @routes_bp.route('/analise_detalhada/<codigo_loja>')
 def analise_detalhada(codigo_loja):
@@ -288,7 +319,8 @@ def analise_detalhada(codigo_loja):
 
     agrupado_loja = df_loja.groupby(['cor_pai', 'tamanho'])['Estoque'].sum().reset_index()
 
-    tamanhos_unicos = sorted(df_filtrado['tamanho'].unique())
+    # 👉 Usa o df_loja, que é tudo da loja, incluindo tamanhos fora da grade
+    tamanhos_unicos = sorted(df_loja['tamanho'].unique())
     cores_unicas = sorted(df_filtrado['cor_pai'].unique())
     combinacoes_todas = [(cor, tam) for cor in cores_unicas for tam in tamanhos_unicos]
 
@@ -373,6 +405,17 @@ def analise_detalhada(codigo_loja):
     sobras = df_completo[df_completo['diferenca'] > 0].to_dict(orient='records')
     faltas = df_completo[df_completo['diferenca'] < 0].to_dict(orient='records')
 
+    # ✅ Chamada com tamanhos válidos
+    comparativo_percentual = calcular_percentual_grade_ideal(
+        df_global,
+        codigo_loja_int,
+        filtro_sub_grupo,
+        tamanhos_validos=todos_tamanhos
+    )
+    
+    # ⚠️ Debug: identificar possíveis diferenças
+    debug_diferencas_estoque_vs_grade(df_global, codigo_loja_int, filtro_sub_grupo, todos_tamanhos)
+
     return render_template(
         'analise_detalhada.html',
         codigo_loja=codigo_loja,
@@ -385,9 +428,9 @@ def analise_detalhada(codigo_loja):
         grade_faltas=grade_faltas,
         todos_tamanhos=todos_tamanhos,
         sobras=sobras,
-        faltas=faltas
+        faltas=faltas,
+        comparativo_percentual=comparativo_percentual
     )
-
 
 
 # Ajuste para o código que gera as sobras

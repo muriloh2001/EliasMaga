@@ -7,7 +7,23 @@
 </head>
 <body class="bg-gray-50 text-gray-800 px-6 py-8">
 
+  <!-- Loader Global -->
+<div id="loader"
+     class="fixed inset-0 z-50 bg-white flex items-center justify-center text-xl font-semibold text-blue-600 transition-opacity duration-300 ease-out">
+  ⏳ Carregando análise, aguarde...
+</div>
+
+
+<div id="conteudo" class="opacity-0 transition-opacity duration-500 ease-in">
+
   <div class="max-w-7xl mx-auto">
+    <!-- Botão para finalizar -->
+    <form id="formShutdown" method="POST" action="{{ url_for('routes_bp.shutdown') }}">
+      <button type="submit" 
+              class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">
+        Finalizar Aplicação
+      </button>
+    </form>
 
     <h1 class="text-3xl font-bold mb-6 text-center">📊 Análise por Loja</h1>
 
@@ -194,6 +210,19 @@
 
 <script>
   window.onload = function () {
+    // Esconde o loader global e mostra o conteúdo
+    const loader = document.getElementById('loader');
+    const conteudo = document.getElementById('conteudo');
+
+    // Oculta loader com fade
+    loader.classList.add('opacity-0');
+    setTimeout(() => {
+      loader.style.display = 'none';
+      conteudo.classList.remove('opacity-0');
+    }, 300); // tempo para animação de saída
+
+
+    // SweetAlert messages
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}
         {% if category == 'warning' %}
@@ -223,7 +252,22 @@
   };
 </script>
 
+<script>
+  document.getElementById('formShutdown').addEventListener('submit', function(e) {
+  e.preventDefault();
 
+  // Redireciona imediatamente para a página finalizado
+  window.location.href = '{{ url_for("routes_bp.finalizado") }}';
+
+  // Faz a requisição para desligar o servidor, sem aguardar resposta
+  fetch('{{ url_for("routes_bp.shutdown") }}', { method: 'POST' })
+    .catch(err => console.log("Erro ao tentar desligar:", err));
+});
+
+</script>
+
+
+  </div>
 
 </body>
 </html>
