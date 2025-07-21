@@ -14,6 +14,9 @@ from utils.grade_ideal import obter_grade_ideal
 from datetime import datetime
 from utils.estoque import calcular_percentual_grade_ideal
 import signal
+import threading
+import os
+import time
 
 routes_bp = Blueprint('routes_bp', __name__)
 
@@ -34,13 +37,13 @@ def shutdown_server():
 
 @routes_bp.route('/shutdown', methods=['POST'])
 def shutdown():
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        return "Erro: servidor não pode ser finalizado", 500
-    func()
+    def delayed_shutdown():
+        time.sleep(1)  # tempo para o redirecionamento ocorrer
+        os._exit(0)    # força o encerramento do processo
+
+    threading.Thread(target=delayed_shutdown).start()
     print("🛑 Servidor está sendo finalizado...")
     return "🛑 Aplicação encerrada com sucesso!"
-
     
 @routes_bp.route('/', methods=['GET', 'POST'])
 def index():

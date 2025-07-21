@@ -18,12 +18,13 @@
 
   <div class="max-w-7xl mx-auto">
     <!-- Botão para finalizar -->
-    <form id="formShutdown" method="POST" action="{{ url_for('routes_bp.shutdown') }}">
-      <button type="submit" 
-              class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">
-        Finalizar Aplicação
-      </button>
-    </form>
+      <form id="formShutdown" method="POST" action="{{ url_for('routes_bp.shutdown') }}">
+        <button type="submit" 
+                class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition">
+          Finalizar Aplicação
+        </button>
+      </form>
+
 
     <h1 class="text-3xl font-bold mb-6 text-center">📊 Análise por Loja</h1>
 
@@ -254,16 +255,16 @@
 
 <script>
   document.getElementById('formShutdown').addEventListener('submit', function(e) {
-  e.preventDefault();
+    e.preventDefault();
 
-  // Redireciona imediatamente para a página finalizado
-  window.location.href = '{{ url_for("routes_bp.finalizado") }}';
-
-  // Faz a requisição para desligar o servidor, sem aguardar resposta
-  fetch('{{ url_for("routes_bp.shutdown") }}', { method: 'POST' })
-    .catch(err => console.log("Erro ao tentar desligar:", err));
-});
-
+    // Primeiro envia a requisição
+    fetch('{{ url_for("routes_bp.shutdown") }}', { method: 'POST' })
+      .then(() => {
+        // Depois redireciona
+        window.location.href = '{{ url_for("routes_bp.finalizado") }}';
+      })
+      .catch(err => console.log("Erro ao tentar desligar:", err));
+  });
 </script>
 
 
