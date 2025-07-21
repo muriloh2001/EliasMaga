@@ -25,7 +25,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='Logistica&RP',
+    name='Logistica_RP',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -38,5 +38,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-     icon= 'icone.ico',
+     icon= 'static/icone.ico',
 )
