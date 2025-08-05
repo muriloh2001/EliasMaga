@@ -2,13 +2,24 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aplicação Encerrada</title>
+<link rel="icon" href="{{ url_for('static', filename='icone.ico') }}">
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Animação de fade-in */
+    @keyframes fadeIn {
+      0% { opacity: 0; transform: translateY(-30px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+  </style>
 </head>
-<body class="flex items-center justify-center h-screen bg-gray-100 text-center">
-  <div>
-    <h1 class="text-3xl font-bold text-red-600 mb-4">🛑 Aplicação encerrada com sucesso!</h1>
-    <p class="text-gray-700">Você pode fechar esta aba agora.</p>
+<body class="flex items-center justify-center h-screen bg-gradient-to-r from-blue-100 via-purple-200 to-pink-300 text-center font-sans">
+  <div class="bg-white p-6 rounded-xl shadow-lg w-80 animate-fadeIn">
+    <h1 class="text-4xl font-semibold text-green-500 mb-4">
+      <span role="img" aria-label="check-circle">✔️</span> Aplicação encerrada com sucesso!
+    </h1>
+    <p class="text-gray-600 mb-6">Tudo foi finalizado corretamente. Você já pode fechar esta aba.</p>
   </div>
 </body>
 </html>
