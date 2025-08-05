@@ -27,8 +27,10 @@ def abrir_navegador():
 
 if __name__ == '__main__':
     app = create_app()
-    
+
+    # Thread para abrir o navegador
     threading.Thread(target=abrir_navegador).start()
 
-    app.run(debug=True, use_reloader=False)
-
+    # Usando a porta dinamica do Render
+    port = int(os.environ.get("PORT", 5000))  # Usando a variável de ambiente PORT
+    app.run(debug=True, use_reloader=False, host="0.0.0.0", port=port)  # Expondo na porta correta
